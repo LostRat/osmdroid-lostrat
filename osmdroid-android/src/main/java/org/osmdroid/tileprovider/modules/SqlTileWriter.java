@@ -743,6 +743,14 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
             if (mDb == null) {
                 try {
                     mDb = SQLiteDatabase.openOrCreateDatabase(db_file, null);
+                    
+                    // API 23+ optimizations: Enable WAL mode and performance settings
+                    mDb.enableWriteAheadLogging();
+                    mDb.execSQL("PRAGMA synchronous = NORMAL");
+                    mDb.execSQL("PRAGMA cache_size = 10000");
+                    mDb.execSQL("PRAGMA temp_store = MEMORY");
+                    mDb.execSQL("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
+
                     mDb.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE + " (" + DatabaseFileArchive.COLUMN_KEY + " INTEGER , " + DatabaseFileArchive.COLUMN_PROVIDER + " TEXT, " + DatabaseFileArchive.COLUMN_TILE + " BLOB, " + COLUMN_EXPIRES + " INTEGER, PRIMARY KEY (" + DatabaseFileArchive.COLUMN_KEY + ", " + DatabaseFileArchive.COLUMN_PROVIDER + "));");
                 } catch (Exception ex) {
                     Log.e(IMapView.LOGTAG, "Unable to start the sqlite tile writer. Check external storage availability.", ex);

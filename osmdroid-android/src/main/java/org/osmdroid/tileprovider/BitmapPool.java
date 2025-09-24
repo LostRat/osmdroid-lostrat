@@ -58,14 +58,17 @@ public class BitmapPool {
     }
 
     public void applyReusableOptions(final BitmapFactory.Options aBitmapOptions, final int width, final int height) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            // This could be optimized for KK and up, as from there on the only requirement is that
-            // the reused bitmap's allocatedbytes are >= the size of new one. Since the pool is
-            // almost only used for tiles of the same dimensions, the gains will probably be small.
-            aBitmapOptions.inBitmap = obtainSizedBitmapFromPool(width, height);
-            aBitmapOptions.inSampleSize = 1;
-            aBitmapOptions.inMutable = true;
+        // API 23+ - always available, no need for version checks
+        // First try to get exact size match
+        aBitmapOptions.inBitmap = obtainSizedBitmapFromPool(width, height);
+        
+        // API 19+ - can reuse bitmaps with different dimensions if they have enough allocated bytes
+        if (aBitmapOptions.inBitmap == null) {
+            aBitmapOptions.inBitmap = obtainLargerBitmapFromPool(width, height);
         }
+        
+        aBitmapOptions.inSampleSize = 1;
+        aBitmapOptions.inMutable = true;
     }
 
     /**
@@ -108,6 +111,37 @@ public class BitmapPool {
         return null;
     }
 
+    /**
+     * API 19+ optimization: Find a bitmap that has enough allocated bytes to be reused
+     * for the requested dimensions, even if the dimensions don't match exactly.
+     * 
+     * @param aWidth  Required width
+     * @param aHeight Required height
+     * @return A bitmap with sufficient allocated bytes, or null if none available
+     * @since API 23+ optimization
+     */
+    public Bitmap obtainLargerBitmapFromPool(final int aWidth, final int aHeight) {
+        synchronized (mPool) {
+            if (mPool.isEmpty()) {
+                return null;
+            }
+            
+            final int requiredBytes = aWidth * aHeight * 4; // 4 bytes per pixel for ARGB_8888
+            
+            for (final Bitmap bitmap : mPool) {
+                if (bitmap.isRecycled()) {
+                    mPool.remove(bitmap);
+                    return obtainLargerBitmapFromPool(aWidth, aHeight); // recurse to prevent ConcurrentModificationException
+                } else if (bitmap.getAllocationByteCount() >= requiredBytes) {
+                    mPool.remove(bitmap);
+                    return bitmap;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public void clearBitmapPool() {
         synchronized (sInstance.mPool) {
             while (!sInstance.mPool.isEmpty()) {
@@ -135,19 +169,14 @@ public class BitmapPool {
 
     /**
      * @since 6.0.0
+     * API 23+ optimization: Removed manual bitmap recycling as it's unnecessary from API 16+
      */
     private void syncRecycle(final Drawable pDrawable) {
         if (pDrawable == null) {
             return;
         }
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.GINGERBREAD_MR1) {
-            if (pDrawable instanceof BitmapDrawable) {
-                final Bitmap bitmap = ((BitmapDrawable) pDrawable).getBitmap();
-                if (bitmap != null) {
-                    bitmap.recycle();
-                }
-            }
-        }
+        // Manual bitmap recycling removed - unnecessary for API 23+
+        // The system handles bitmap memory management automatically
         if (pDrawable instanceof ReusableBitmapDrawable) {
             returnDrawableToPool((ReusableBitmapDrawable) pDrawable);
         }
