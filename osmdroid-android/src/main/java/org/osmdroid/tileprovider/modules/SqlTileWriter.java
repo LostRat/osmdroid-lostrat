@@ -539,7 +539,7 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
         Cursor cursor = null;
         try {
             cursor = getTileCursor(getPrimaryKeyParameters(getIndex(pMapTileIndex), pTileSource), expireQueryColumn);
-            if (cursor.moveToNext()) {
+            if (cursor != null && cursor.moveToNext()) {
                 return cursor.getLong(0);
             }
         } catch (Exception ex) {
@@ -590,6 +590,9 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
      */
     public Cursor getTileCursor(final String[] pPrimaryKeyParameters, final String[] pColumns) {
         final SQLiteDatabase db = getDb();
+        if (db == null || !db.isOpen()) {
+            return null;
+        }
         return db.query(DatabaseFileArchive.TABLE, pColumns, primaryKey, pPrimaryKeyParameters, null, null, null);
     }
 
@@ -615,7 +618,7 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
         try {
             final long index = getIndex(pMapTileIndex);
             cur = getTileCursor(getPrimaryKeyParameters(index, pTileSource), queryColumns);
-            if (cur.moveToFirst()) {
+            if (cur != null && cur.moveToFirst()) {
                 bits = cur.getBlob(0);
                 expirationTimestamp = cur.getLong(1);
             }
@@ -744,16 +747,39 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
                 try {
                     mDb = SQLiteDatabase.openOrCreateDatabase(db_file, null);
                     
-                    // API 23+ optimizations: Enable WAL mode and performance settings
-                    mDb.enableWriteAheadLogging();
-                    mDb.execSQL("PRAGMA synchronous = NORMAL");
-                    mDb.execSQL("PRAGMA cache_size = 10000");
-                    mDb.execSQL("PRAGMA temp_store = MEMORY");
-                    mDb.execSQL("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
-
+                    // Check if database is writable before applying optimizations
+                    if (mDb.isReadOnly()) {
+                        Log.w(IMapView.LOGTAG, "Database opened in read-only mode, tile caching will be disabled");
+                        mDb.close();
+                        mDb = null;
+                        return null;
+                    }
+                    
+                    // Create table first before applying optimizations
                     mDb.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE + " (" + DatabaseFileArchive.COLUMN_KEY + " INTEGER , " + DatabaseFileArchive.COLUMN_PROVIDER + " TEXT, " + DatabaseFileArchive.COLUMN_TILE + " BLOB, " + COLUMN_EXPIRES + " INTEGER, PRIMARY KEY (" + DatabaseFileArchive.COLUMN_KEY + ", " + DatabaseFileArchive.COLUMN_PROVIDER + "));");
+                    
+                    // Apply optimizations with error handling
+                    try {
+                        // API 23+ optimizations: Enable WAL mode and performance settings
+                        mDb.enableWriteAheadLogging();
+                        mDb.execSQL("PRAGMA synchronous = NORMAL");
+                        mDb.execSQL("PRAGMA cache_size = 10000");
+                        mDb.execSQL("PRAGMA temp_store = MEMORY");
+                        mDb.execSQL("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
+                    } catch (Exception pragmaEx) {
+                        Log.w(IMapView.LOGTAG, "Failed to apply database optimizations, continuing with basic setup", pragmaEx);
+                        // Continue without optimizations if they fail
+                    }
                 } catch (Exception ex) {
                     Log.e(IMapView.LOGTAG, "Unable to start the sqlite tile writer. Check external storage availability.", ex);
+                    if (mDb != null) {
+                        try {
+                            mDb.close();
+                        } catch (Exception closeEx) {
+                            // Ignore close errors
+                        }
+                        mDb = null;
+                    }
                     catchException(ex);
                     return null;
                 }
