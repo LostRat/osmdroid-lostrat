@@ -139,6 +139,16 @@ public class StorageUtils {
                 storageInfos = new ArrayList<>();
             }
         }
+        // API 23+ security enhancement: Use private storage by default
+        else if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (context != null) {
+                // Prioritize app-private storage for security
+                storageInfos = getStorageListApi19(context);
+            } else {
+                // Without context, return empty list to avoid external storage access
+                storageInfos = new ArrayList<>();
+            }
+        }
         // use legacy behaviour but add locations from "modern" way of getting storage if context is
         // available.
         else if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -279,14 +289,19 @@ public class StorageUtils {
     /**
      * Gets the best possible storage location by free space
      * <p>
-     * Attention! If context==null this method only gets storage locations that are context
-     * independent. Especially it will not return application specific paths like getFilesDir() or
-     * getCacheDir(), which might lead to problems especially on API29 and up due to scoped storage
-     * restrictions, where this is then guaranteed to return null!
+     * For API 23+, this method prioritizes app-private storage locations to avoid
+     * path traversal vulnerabilities and comply with modern Android storage practices.
+     * Falls back to legacy behavior only when necessary and context is available.
      *
      * @return A {@link StorageInfo} object.
      */
     public static StorageInfo getBestWritableStorage(final Context context) {
+        // API 23+ optimization: Prioritize private app storage for security
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && context != null) {
+            return getBestPrivateStorage(context);
+        }
+        
+        // Legacy behavior for older APIs or when context is null
         StorageInfo bestStorage = null;
         List<StorageInfo> storageList = getStorageList(context);
         for (int i = 0; i < storageList.size(); i++) {
@@ -302,6 +317,44 @@ public class StorageUtils {
                 }
             }
         }
+        return bestStorage;
+    }
+    
+    /**
+     * Gets the best private storage location for API 23+, avoiding shared external storage
+     * to prevent path traversal vulnerabilities and comply with scoped storage.
+     * 
+     * @param context Android context
+     * @return Best private storage location
+     * @since API 23+ security enhancement
+     */
+    private static StorageInfo getBestPrivateStorage(final Context context) {
+        StorageInfo bestStorage = null;
+        
+        // 1. Try app-specific external directories first (no permissions needed)
+        File[] externalDirs = context.getExternalFilesDirs(null);
+        if (externalDirs != null) {
+            for (File externalDir : externalDirs) {
+                if (externalDir != null && isWritable(externalDir)) {
+                    String state = Environment.getExternalStorageState(externalDir);
+                    if (Environment.MEDIA_MOUNTED.equals(state)) {
+                        StorageInfo storage = new StorageInfo(externalDir.getAbsolutePath(), false, false, -1);
+                        if (bestStorage == null || storage.freeSpace > bestStorage.freeSpace) {
+                            bestStorage = storage;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 2. Fallback to internal app storage (always available)
+        if (bestStorage == null) {
+            File internalDir = context.getFilesDir();
+            if (internalDir != null && isWritable(internalDir)) {
+                bestStorage = new StorageInfo(internalDir.getAbsolutePath(), true, false, -1);
+            }
+        }
+        
         return bestStorage;
     }
 
