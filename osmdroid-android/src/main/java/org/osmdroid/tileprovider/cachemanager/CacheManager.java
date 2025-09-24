@@ -45,8 +45,15 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+
+import android.os.Build;
+import android.util.ArraySet;
+import android.util.LruCache;
 
 /**
  * Provides various methods for managing the local filesystem cache of osmdroid tiles: <br>
@@ -75,11 +82,19 @@ public class CacheManager {
     protected final IFilesystemCache mTileWriter;
     protected final int mMinZoomLevel;
     protected final int mMaxZoomLevel;
-    protected Set<CacheManagerTask> mPendingTasks = new HashSet<>();
+    // API 23+ optimization: Use thread-safe collection for better concurrent performance
+    protected Set<CacheManagerTask> mPendingTasks = new CopyOnWriteArraySet<>();
     protected boolean verifyCancel = true;
 
-    private final ExecutorService mExecutorService = Executors.newSingleThreadExecutor();
+    // API 23+ optimization: Use work-stealing pool for better multi-core utilization
+    private final ExecutorService mExecutorService = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ?
+            ForkJoinPool.commonPool() : 
+            Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors()));
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    
+    // API 23+ optimization: Cache expensive mathematical calculations
+    private static final LruCache<String, Double> sGroundResolutionCache = new LruCache<>(1000);
+    private static final LruCache<String, Point> sTileCache = new LruCache<>(2000);
 
     public CacheManager(final MapView mapView) throws TileSourcePolicyException {
         this(mapView, mapView.getTileProvider().getTileWriter());
@@ -120,6 +135,37 @@ public class CacheManager {
      */
     public int getPendingJobs() {
         return mPendingTasks.size();
+    }
+    
+    /**
+     * API 23+ optimization: Cache expensive ground resolution calculations
+     * @since API 23+ optimization
+     */
+    private static double getCachedGroundResolution(double latitude, int zoomLevel) {
+        String key = latitude + "_" + zoomLevel;
+        Double cached = sGroundResolutionCache.get(key);
+        if (cached == null) {
+            cached = TileSystem.GroundResolution(latitude, zoomLevel);
+            sGroundResolutionCache.put(key, cached);
+        }
+        return cached;
+    }
+    
+    /**
+     * API 23+ optimization: Cache tile coordinate calculations
+     * @since API 23+ optimization
+     */
+    private static Point getCachedTilePoint(double longitude, double latitude, int zoomLevel) {
+        String key = longitude + "_" + latitude + "_" + zoomLevel;
+        Point cached = sTileCache.get(key);
+        if (cached == null) {
+            cached = new Point(
+                MapView.getTileSystem().getTileXFromLongitude(longitude, zoomLevel),
+                MapView.getTileSystem().getTileYFromLatitude(latitude, zoomLevel)
+            );
+            sTileCache.put(key, cached);
+        }
+        return cached;
     }
 
     /**
@@ -229,7 +275,10 @@ public class CacheManager {
      * @return list of tiles for that zoom level, without any specific order
      */
     public static Collection<Long> getTilesCoverage(final BoundingBox pBB, final int pZoomLevel) {
-        final Set<Long> result = new LinkedHashSet<>();
+        // API 23+ optimization: Use ArraySet for better performance with small to medium collections
+        final Set<Long> result = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+                new ArraySet<>() : new LinkedHashSet<>();
+        
         for (Long mapTile : getTilesCoverageIterable(pBB, pZoomLevel, pZoomLevel)) {
             result.add(mapTile);
         }
@@ -300,7 +349,11 @@ public class CacheManager {
      */
     public static Collection<Long> getTilesCoverage(final ArrayList<GeoPoint> pGeoPoints,
                                                     final int pZoomLevel) {
-        final Set<Long> result = new HashSet<>();
+        // API 23+ optimization: Use concurrent collections for thread safety and performance
+        final Set<Long> result = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ?
+                ConcurrentHashMap.newKeySet() : 
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+                new ArraySet<>() : new HashSet<>();
 
         GeoPoint prevPoint = null;
         Point tile, prevTile = null;
@@ -308,7 +361,8 @@ public class CacheManager {
         final int mapTileUpperBound = 1 << pZoomLevel;
         for (GeoPoint geoPoint : pGeoPoints) {
 
-            final double d = TileSystem.GroundResolution(geoPoint.getLatitude(), pZoomLevel);
+            // API 23+ optimization: Cache expensive ground resolution calculations
+            final double d = getCachedGroundResolution(geoPoint.getLatitude(), pZoomLevel);
 
             if (result.size() != 0) {
 
@@ -344,15 +398,18 @@ public class CacheManager {
 
                         if (!tile.equals(prevTile)) {
 //Log.d(Constants.APP_TAG, "New Tile lat " + tile.x + " lon " + tile.y);
+                            // API 23+ optimization: Bulk operations for better performance
                             int ofsx = tile.x >= 0 ? 0 : -tile.x;
                             int ofsy = tile.y >= 0 ? 0 : -tile.y;
+                            List<Long> tilesToAdd = new ArrayList<>(4); // Pre-sized for typical 2x2 area
                             for (int xAround = tile.x + ofsx; xAround <= tile.x + 1 + ofsx; xAround++) {
                                 for (int yAround = tile.y + ofsy; yAround <= tile.y + 1 + ofsy; yAround++) {
                                     final int tileY = MyMath.mod(yAround, mapTileUpperBound);
                                     final int tileX = MyMath.mod(xAround, mapTileUpperBound);
-                                    result.add(MapTileIndex.getTileIndex(pZoomLevel, tileX, tileY));
+                                    tilesToAdd.add(MapTileIndex.getTileIndex(pZoomLevel, tileX, tileY));
                                 }
                             }
+                            result.addAll(tilesToAdd); // Single bulk operation
 
                             prevTile = tile;
                         }
@@ -365,15 +422,18 @@ public class CacheManager {
                         MapView.getTileSystem().getTileYFromLatitude(geoPoint.getLatitude(), pZoomLevel));
                 prevTile = tile;
 
+                // API 23+ optimization: Bulk operations for better performance
                 int ofsx = tile.x >= 0 ? 0 : -tile.x;
                 int ofsy = tile.y >= 0 ? 0 : -tile.y;
+                List<Long> tilesToAdd = new ArrayList<>(4); // Pre-sized for typical 2x2 area
                 for (int xAround = tile.x + ofsx; xAround <= tile.x + 1 + ofsx; xAround++) {
                     for (int yAround = tile.y + ofsy; yAround <= tile.y + 1 + ofsy; yAround++) {
                         final int tileY = MyMath.mod(yAround, mapTileUpperBound);
                         final int tileX = MyMath.mod(xAround, mapTileUpperBound);
-                        result.add(MapTileIndex.getTileIndex(pZoomLevel, tileX, tileY));
+                        tilesToAdd.add(MapTileIndex.getTileIndex(pZoomLevel, tileX, tileY));
                     }
                 }
+                result.addAll(tilesToAdd); // Single bulk operation
             }
 
             prevPoint = geoPoint;
@@ -529,10 +589,15 @@ public class CacheManager {
      * @since 5.6.3
      */
     public void cancelAllJobs() {
-        Iterator<CacheManagerTask> iterator = mPendingTasks.iterator();
-        while (iterator.hasNext()) {
-            CacheManagerTask next = iterator.next();
-            next.cancel(true);
+        // API 23+ optimization: Use modern iteration patterns for better performance
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // API 24+: Use parallel streams for faster cancellation of many tasks
+            mPendingTasks.parallelStream().forEach(task -> task.cancel(true));
+        } else {
+            // API 23+: Use enhanced for-each (CopyOnWriteArraySet is safe for concurrent iteration)
+            for (CacheManagerTask task : mPendingTasks) {
+                task.cancel(true);
+            }
         }
         mPendingTasks.clear();
     }

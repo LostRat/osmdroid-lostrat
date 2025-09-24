@@ -1,7 +1,10 @@
 package org.osmdroid.tileprovider.modules;
 
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.Log;
+
+import androidx.annotation.RequiresApi;
 
 import org.osmdroid.api.IMapView;
 import org.osmdroid.config.Configuration;
@@ -17,6 +20,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -115,16 +121,50 @@ public class TileWriter implements IFilesystemCache {
             return false;
         }
 
+        // API level aware file I/O optimization
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // API 26+ - Use NIO.2 for best performance
+            return saveFileNIO2(file, pStream);
+        } else {
+            // API 23-25 - Use optimized traditional I/O
+            return saveFileTraditional(file, pStream);
+        }
+    }
+
+    /**
+     * API 26+ optimized file saving using NIO.2
+     */
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private boolean saveFileNIO2(final File file, final InputStream pStream) {
+        try {
+            final long length = Files.copy(pStream, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            mUsedCacheSpace += length;
+            if (mUsedCacheSpace > Configuration.getInstance().getTileFileSystemCacheMaxBytes()) {
+                cutCurrentCache();
+            }
+            return true;
+        } catch (final IOException e) {
+            Counters.fileCacheSaveErrors++;
+            return false;
+        }
+    }
+
+    /**
+     * API 23-25 optimized file saving using traditional I/O with larger buffers
+     */
+    private boolean saveFileTraditional(final File file, final InputStream pStream) {
         BufferedOutputStream outputStream = null;
         try {
-            outputStream = new BufferedOutputStream(new FileOutputStream(file.getPath()),
-                    StreamUtils.IO_BUFFER_SIZE);
+            // Use larger buffer for API 23+ (was 8KB, now 64KB for better performance)
+            final int bufferSize = 65536; // 64KB buffer
+            outputStream = new BufferedOutputStream(new FileOutputStream(file.getPath()), bufferSize);
             final long length = StreamUtils.copy(pStream, outputStream);
 
             mUsedCacheSpace += length;
             if (mUsedCacheSpace > Configuration.getInstance().getTileFileSystemCacheMaxBytes()) {
                 cutCurrentCache(); // TODO perhaps we should do this in the background
             }
+            return true;
         } catch (final IOException e) {
             Counters.fileCacheSaveErrors++;
             return false;
@@ -133,7 +173,6 @@ public class TileWriter implements IFilesystemCache {
                 StreamUtils.closeStream(outputStream);
             }
         }
-        return true;
     }
 
     @Override
