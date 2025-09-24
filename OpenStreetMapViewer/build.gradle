@@ -24,19 +24,20 @@ android {
         compileSdk = project.hasProperty('android.compileSdkVersion')
                 ? Integer.parseInt(project.property('android.compileSdkVersion')) : 35
 
-        // default targetSdkVersion to API 23, if not provided
+        // default targetSdkVersion to API 34+ for 16KB compatibility
         targetSdkVersion(project.hasProperty('android.targetSdkVersion')
-                ? Integer.parseInt(project.property('android.targetSdkVersion')) : 30)
+                ? Integer.parseInt(project.property('android.targetSdkVersion')) : 34)
 
         // default versionCode o 1 if not provided
         versionCode(project.hasProperty('android.versionCode')
                 ? Integer.parseInt(project.property('android.versionCode')) : 1)
 
         versionName project.version
-    }
-    lintOptions {
-        abortOnError = false
-        disable 'NonConstantResourceId'
+        
+        // 16KB page size compatibility settings
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
     }
 
     testOptions {
@@ -49,15 +50,46 @@ android {
             }
         }
     }
-
     packagingOptions {
-        pickFirst "androidsupportmultidexversion.txt"
-        pickFirst "META-INF/AL2.0"
-        pickFirst "META-INF/LGPL2.1"
+        resources {
+            pickFirsts += ['androidsupportmultidexversion.txt', 'META-INF/AL2.0', 'META-INF/LGPL2.1']
+        }
+        // Fix for 16KB page size compatibility (required for Google Play Nov 2025+)
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
+    
+    // Additional configuration for 16KB page size compatibility
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    
+    // Modern 16KB alignment for AGP 8.1+
+    bundle {
+        language {
+            enableSplit = false
+        }
+        density {
+            enableSplit = false
+        }
+        abi {
+            enableSplit = false
+        }
+    }
+    
+
+
     buildFeatures {
         buildConfig = true
     }
+    lint {
+        abortOnError false
+        disable 'NonConstantResourceId'
+    }
+    
+
 
 }
 
@@ -104,7 +136,7 @@ dependencies {
     implementation group: 'com.opencsv', name: 'opencsv', version: '5.12.0'
 
     //usual android stuff
-    implementation "com.google.android.material:material:1.12.0" //needed for UI menuing
+    implementation "com.google.android.material:material:1.13.0" //needed for UI menuing
     implementation "androidx.cardview:cardview:1.0.0"
     implementation "androidx.recyclerview:recyclerview:1.4.0"
     implementation 'androidx.multidex:multidex:2.0.1'
@@ -127,6 +159,30 @@ dependencies {
     androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
     // Optional -- UI testing with Compose
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:1.9.0"
+
+
+    implementation("mil.nga.geopackage:geopackage-android:6.7.4") {
+        // It's good practice to repeat the excludes here if you repeated them
+        // in the osmdroid-geopackage module, for consistency and to ensure
+        // only what you need is included.
+        exclude group: 'com.google.android.gms'
+        exclude group: 'com.google.maps.android'
+        exclude group: 'com.android.support', module: 'support-v13'
+        
+        // Exclude the problematic SQLite library for 16KB compatibility
+        exclude group: 'io.requery', module: 'sqlite-android'
+        exclude module: 'sqlite-android'
+
+        // *** IMPORTANT: Make sure this exclude is REMOVED here too ***
+        // exclude group: 'com.j256.ormlite'
+    }
+    
+    // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
+    implementation 'androidx.sqlite:sqlite:2.6.0'
+    implementation 'androidx.sqlite:sqlite-framework:2.6.0'
+
+
+
 }
 
 configurations.all {
@@ -134,6 +190,10 @@ configurations.all {
         force "androidx.lifecycle:lifecycle-livedata:2.6.2"
         force "androidx.lifecycle:lifecycle-runtime:2.6.2"
         force "androidx.lifecycle:lifecycle-viewmodel:2.6.2"
+        
+        // Force use of system SQLite for 16KB compatibility
+        force 'androidx.sqlite:sqlite:2.4.0'
+        force 'androidx.sqlite:sqlite-framework:2.4.0'
     }
 }
 

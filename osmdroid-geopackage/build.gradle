@@ -27,10 +27,15 @@ android {
         }
     }
     packagingOptions {
-        excludes += "DebugProbesKt.bin"
-        excludes += "com/j256/ormlite/core/LICENSE.txt"
+        resources {
+            excludes += ['DebugProbesKt.bin', 'com/j256/ormlite/core/LICENSE.txt']
+        }
+        // 16KB page size compatibility for native libraries
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
-    
+
 }
 
 dependencies {
@@ -40,21 +45,23 @@ dependencies {
     testImplementation 'org.junit.vintage:junit-vintage-engine:5.13.4'
 
     api  project(':osmdroid-android')
-    api ("mil.nga.geopackage:geopackage-android:6.7.4"){
-        exclude group: 'com.google.android.gms', module:'play-services'
-        exclude group: 'com.google.maps.android', module:'android-maps-utils'
+    implementation ("mil.nga.geopackage:geopackage-android:6.7.4"){
+        exclude group: 'com.google.android.gms'
+        exclude group: 'com.google.maps.android'
         exclude group: 'com.android.support',module: 'support-v13'
-        exclude group: 'org.osmdroid.gpkg'
-        exclude module: 'ormlite-core'
-        exclude group: 'com.j256.ormlite'
+        
+        // Exclude the problematic SQLite library for 16KB compatibility
+        exclude group: 'io.requery', module: 'sqlite-android'
+        exclude module: 'sqlite-android'
+        
+//        exclude group: 'org.osmdroid.gpkg'
+//        exclude module: 'ormlite-core'
+//        exclude group: 'com.j256.ormlite'
     }
 
-    api 'mil.nga.geopackage:geopackage-core:6.6.7'
-    api 'ar.com.hjg:pngj:2.1.0'
-    api 'mil.nga:tiff:3.0.0'
-
-    api 'ar.com.hjg:pngj:2.1.0'
-    api 'mil.nga:tiff:3.0.0'
+//    api 'mil.nga.geopackage:geopackage-core:6.6.7'
+//    api 'ar.com.hjg:pngj:2.1.0'
+//    api 'mil.nga:tiff:3.0.0'
 }
 
 tasks.register('androidSourcesJar', Jar) {

@@ -8,9 +8,6 @@ version =  project.property("pom.version")
 android {
     namespace = 'org.osmdroid.wms'
     compileSdkVersion = findProperty('android.compileSdkVersion').toInteger()
-    lintOptions {
-        abortOnError = false
-    }
     testOptions {
         unitTests.returnDefaultValues = true
     }
@@ -28,6 +25,9 @@ android {
             withSourcesJar()
             withJavadocJar()
         }
+    }
+    lint {
+        abortOnError false
     }
 }
 

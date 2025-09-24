@@ -13,9 +13,6 @@ android {
         minSdkVersion 23
     }
 
-    lintOptions {
-        abortOnError = false
-    }
     buildTypes {
         release {
             minifyEnabled false
@@ -27,6 +24,9 @@ android {
             withSourcesJar()
             withJavadocJar()
         }
+    }
+    lint {
+        abortOnError false
     }
 }
 
