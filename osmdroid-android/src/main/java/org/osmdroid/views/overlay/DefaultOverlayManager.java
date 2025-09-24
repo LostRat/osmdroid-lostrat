@@ -14,10 +14,21 @@ import org.osmdroid.views.Projection;
 import org.osmdroid.views.overlay.Overlay.Snappable;
 
 import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.Arrays;
+
+import android.os.Build;
+import android.util.ArrayMap;
+import org.osmdroid.util.BoundingBox;
+import org.osmdroid.util.GeoPoint;
 
 /**
  * https://github.com/osmdroid/osmdroid/issues/154
@@ -30,10 +41,51 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     private TilesOverlay mTilesOverlay;
 
     private final CopyOnWriteArrayList<Overlay> mOverlayList;
+    
+    // API 23+ optimization: Spatial indexing for fast tap detection
+    private final Map<Integer, List<Overlay>> mSpatialIndex = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+            new ArrayMap<>() : new HashMap<>();
+    private final List<Overlay> mVisibleOverlays = new ArrayList<>();
+    private final int GRID_SIZE = 256; // pixels
+    private BoundingBox mLastViewport = null;
+    private double mLastZoomLevel = -1;
+    
+    // ENHANCED FIX: Z-Index layer system with predefined layers
+    public enum OverlayLayer {
+        BACKGROUND_TILES(0),      // Tile overlays, base maps
+        BACKGROUND_SHAPES(1),     // Background polylines, polygons
+        DECORATION(2),            // Tiny markers, vertex dots, decorative elements
+        MAIN_CONTENT(3),          // Main polylines, primary content
+        INTERACTIVE_BACKGROUND(4), // Clickable polylines, selectable shapes
+        INTERACTIVE_CONTENT(5),   // Main markers, important interactive elements
+        USER_DRAWING(6),          // User-drawn lines that should be on top
+        OVERLAY_CONTROLS(7),      // UI overlays, controls
+        POPUP_CONTENT(8),         // Info windows, popups
+        DEBUG_OVERLAY(9);         // Debug information, always on top
+        
+        private final int zIndex;
+        
+        OverlayLayer(int zIndex) {
+            this.zIndex = zIndex;
+        }
+        
+        public int getZIndex() {
+            return zIndex;
+        }
+    }
+    
+    private final Map<OverlayLayer, List<Overlay>> mLayeredOverlays = new HashMap<>();
+    private final Map<Overlay, OverlayLayer> mOverlayToLayer = new HashMap<>();
+    private boolean mUseLayerSystem = true;
 
     public DefaultOverlayManager(final TilesOverlay tilesOverlay) {
         setTilesOverlay(tilesOverlay);
         mOverlayList = new CopyOnWriteArrayList<>();
+        
+        // Initialize layer system
+        for (OverlayLayer layer : OverlayLayer.values()) {
+            mLayeredOverlays.put(layer, new ArrayList<>());
+        }
     }
 
     @Override
@@ -54,12 +106,19 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             Log.e(IMapView.LOGTAG, "Attempt to add a null overlay to the collection. This is probably a bug and should be reported!", ex);
         } else {
             mOverlayList.add(pIndex, pElement);
+            // ENHANCED FIX: Automatically assign overlay to appropriate layer
+            assignOverlayToLayer(pElement);
         }
     }
 
     @Override
     public Overlay remove(final int pIndex) {
-        return mOverlayList.remove(pIndex);
+        Overlay removed = mOverlayList.remove(pIndex);
+        if (removed != null) {
+            // ENHANCED FIX: Remove from layer system
+            removeOverlayFromLayer(removed);
+        }
+        return removed;
     }
 
     @Override
@@ -172,9 +231,52 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         }
 
         //always pass false, the shadow parameter will be removed in a later version of osmdroid, this change should result in the on draw being called twice
+        if (mUseLayerSystem) {
+            // ENHANCED FIX: Draw overlays in proper layer order
+            drawWithLayers(c, pMapView, pProjection);
+        } else {
+            // Legacy drawing order
+            for (final Overlay overlay : mOverlayList) {
+                //#396 fix, null check
+                if (overlay != null && overlay.isEnabled()) {
+                    if (pMapView != null) {
+                        overlay.draw(c, pMapView, false);
+                    } else {
+                        overlay.draw(c, pProjection);
+                    }
+                }
+            }
+        }
+        //potential fix for #52 pMapView.invalidate();
+    }
+    
+    /**
+     * ENHANCED FIX: Draw overlays in proper layer order (lowest to highest z-index)
+     * @since Enhanced layer system
+     */
+    private void drawWithLayers(final Canvas c, final MapView pMapView, final Projection pProjection) {
+        // Draw layers from lowest to highest z-index
+        OverlayLayer[] layers = OverlayLayer.values();
+        Arrays.sort(layers, (a, b) -> Integer.compare(a.getZIndex(), b.getZIndex()));
+        
+        for (OverlayLayer layer : layers) {
+            List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
+            if (layerOverlays == null) continue;
+            
+            for (final Overlay overlay : layerOverlays) {
+                if (overlay != null && overlay.isEnabled()) {
+                    if (pMapView != null) {
+                        overlay.draw(c, pMapView, false);
+                    } else {
+                        overlay.draw(c, pProjection);
+                    }
+                }
+            }
+        }
+        
+        // Fallback: Draw any overlays not assigned to layers (for compatibility)
         for (final Overlay overlay : mOverlayList) {
-            //#396 fix, null check
-            if (overlay != null && overlay.isEnabled()) {
+            if (overlay != null && overlay.isEnabled() && !mOverlayToLayer.containsKey(overlay)) {
                 if (pMapView != null) {
                     overlay.draw(c, pMapView, false);
                 } else {
@@ -182,7 +284,6 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
                 }
             }
         }
-        //potential fix for #52 pMapView.invalidate();
     }
 
     @Override
@@ -302,13 +403,475 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
 
     @Override
     public boolean onSingleTapConfirmed(final MotionEvent e, final MapView pMapView) {
-        for (final Overlay overlay : this.overlaysReversed()) {
-            if (overlay.onSingleTapConfirmed(e, pMapView)) {
-                return true;
+        if (mUseLayerSystem) {
+            return onSingleTapConfirmedWithLayers(e, pMapView);
+        } else {
+            return onSingleTapConfirmedLegacy(e, pMapView);
+        }
+    }
+    
+    /**
+     * ENHANCED FIX: Layer-based tap handling - Higher layers get priority
+     * @since Enhanced layer system
+     */
+    private boolean onSingleTapConfirmedWithLayers(final MotionEvent e, final MapView pMapView) {
+        // Process layers from highest to lowest z-index
+        OverlayLayer[] layers = OverlayLayer.values();
+        
+        // Sort layers by z-index (highest first)
+        Arrays.sort(layers, (a, b) -> Integer.compare(b.getZIndex(), a.getZIndex()));
+        
+        for (OverlayLayer layer : layers) {
+            List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
+            if (layerOverlays == null || layerOverlays.isEmpty()) {
+                continue;
+            }
+            
+            // For interactive layers, check all overlays
+            if (isInteractiveLayer(layer)) {
+                for (final Overlay overlay : layerOverlays) {
+                    if (overlay.isEnabled() && overlay.onSingleTapConfirmed(e, pMapView)) {
+                        return true;
+                    }
+                }
+            } else {
+                // For background layers, use spatial optimization
+                List<Overlay> nearbyOverlays = getNearbyOverlaysInLayer(e, pMapView, layer);
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && nearbyOverlays.size() > 10) {
+                    // API 24+: Use parallel streams for many overlays
+                    if (nearbyOverlays.parallelStream()
+                        .anyMatch(overlay -> overlay.onSingleTapConfirmed(e, pMapView))) {
+                        return true;
+                    }
+                } else {
+                    // Sequential processing
+                    for (final Overlay overlay : nearbyOverlays) {
+                        if (overlay.onSingleTapConfirmed(e, pMapView)) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
 
         return false;
+    }
+    
+    /**
+     * Legacy tap handling for backward compatibility
+     * @since Core architectural fix
+     */
+    private boolean onSingleTapConfirmedLegacy(final MotionEvent e, final MapView pMapView) {
+        // API 23+ optimization: Use spatial indexing and viewport culling for fast tap detection
+        updateVisibleOverlaysIfNeeded(pMapView);
+        
+        final int x = Math.round(e.getX());
+        final int y = Math.round(e.getY());
+        
+        // Get overlays near the tap point using spatial index
+        List<Overlay> nearbyOverlays = getOverlaysNearPoint(x, y, pMapView);
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && nearbyOverlays.size() > 10) {
+            // API 24+: Use parallel streams for many overlays
+            return nearbyOverlays.parallelStream()
+                .anyMatch(overlay -> overlay.onSingleTapConfirmed(e, pMapView));
+        } else {
+            // Sequential processing for fewer overlays or older APIs
+            for (final Overlay overlay : nearbyOverlays) {
+                if (overlay.onSingleTapConfirmed(e, pMapView)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    
+    /**
+     * API 23+ optimization: Update visible overlays only when viewport changes
+     * @since API 23+ optimization
+     */
+    private void updateVisibleOverlaysIfNeeded(MapView mapView) {
+        BoundingBox currentViewport = mapView.getProjection().getBoundingBox();
+        double currentZoom = mapView.getZoomLevelDouble();
+        
+        // Only update if viewport or zoom changed significantly
+        if (mLastViewport == null || 
+            !mLastViewport.equals(currentViewport) || 
+            Math.abs(currentZoom - mLastZoomLevel) > 0.1) {
+            
+            updateVisibleOverlays(mapView);
+            buildSpatialIndex(mapView);
+            mLastViewport = currentViewport;
+            mLastZoomLevel = currentZoom;
+        }
+    }
+    
+    /**
+     * API 23+ optimization: Build spatial index for fast overlay lookup
+     * @since API 23+ optimization
+     */
+    private void buildSpatialIndex(MapView mapView) {
+        mSpatialIndex.clear();
+        Projection projection = mapView.getProjection();
+        
+        for (Overlay overlay : mVisibleOverlays) {
+            if (overlay instanceof Polyline || overlay instanceof Marker || 
+                overlay instanceof ItemizedIconOverlay) {
+                addOverlayToSpatialGrid(overlay, projection);
+            }
+        }
+    }
+    
+    /**
+     * API 23+ optimization: Add overlay to spatial grid
+     * @since API 23+ optimization
+     */
+    private void addOverlayToSpatialGrid(Overlay overlay, Projection projection) {
+        BoundingBox bounds = getOverlayBounds(overlay);
+        if (bounds == null) return;
+        
+        // Convert bounds to screen coordinates and add to grid cells
+        Point topLeft = projection.toPixels(new GeoPoint(bounds.getLatNorth(), bounds.getLonWest()), null);
+        Point bottomRight = projection.toPixels(new GeoPoint(bounds.getLatSouth(), bounds.getLonEast()), null);
+        
+        int startGridX = topLeft.x / GRID_SIZE;
+        int endGridX = bottomRight.x / GRID_SIZE;
+        int startGridY = topLeft.y / GRID_SIZE;
+        int endGridY = bottomRight.y / GRID_SIZE;
+        
+        for (int gridX = startGridX; gridX <= endGridX; gridX++) {
+            for (int gridY = startGridY; gridY <= endGridY; gridY++) {
+                int key = gridX * 10000 + gridY;
+                // API 23+ compatible: Manual computeIfAbsent implementation
+                List<Overlay> overlaysInCell = mSpatialIndex.get(key);
+                if (overlaysInCell == null) {
+                    overlaysInCell = new ArrayList<>();
+                    mSpatialIndex.put(key, overlaysInCell);
+                }
+                overlaysInCell.add(overlay);
+            }
+        }
+    }
+    
+    /**
+     * API 23+ optimization: Get overlays near a screen point
+     * @since API 23+ optimization
+     */
+    private List<Overlay> getOverlaysNearPoint(int x, int y, MapView mapView) {
+        int gridX = x / GRID_SIZE;
+        int gridY = y / GRID_SIZE;
+        int key = gridX * 10000 + gridY;
+        
+        List<Overlay> nearby = mSpatialIndex.get(key);
+        return nearby != null ? nearby : Collections.emptyList();
+    }
+    
+    /**
+     * API 23+ optimization: Update list of visible overlays
+     * @since API 23+ optimization
+     */
+    private void updateVisibleOverlays(MapView mapView) {
+        mVisibleOverlays.clear();
+        BoundingBox viewport = mapView.getProjection().getBoundingBox();
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && mOverlayList.size() > 50) {
+            // API 24+: Use parallel streams for large overlay collections
+            mVisibleOverlays.addAll(
+                mOverlayList.parallelStream()
+                    .filter(overlay -> isOverlayVisible(overlay, viewport))
+                    .collect(Collectors.toList())
+            );
+        } else {
+            // Sequential processing for smaller collections or older APIs
+            for (Overlay overlay : mOverlayList) {
+                if (isOverlayVisible(overlay, viewport)) {
+                    mVisibleOverlays.add(overlay);
+                }
+            }
+        }
+    }
+    
+    /**
+     * API 23+ optimization: Check if overlay is visible in viewport
+     * @since API 23+ optimization
+     */
+    private boolean isOverlayVisible(Overlay overlay, BoundingBox viewport) {
+        BoundingBox overlayBounds = getOverlayBounds(overlay);
+        return overlayBounds == null || viewport.overlaps(overlayBounds, 0);
+    }
+    
+    /**
+     * API 23+ optimization: Get bounding box for overlay
+     * @since API 23+ optimization
+     */
+    private BoundingBox getOverlayBounds(Overlay overlay) {
+        try {
+            if (overlay instanceof PolyOverlayWithIW) {
+                return ((PolyOverlayWithIW) overlay).getBounds();
+            } else if (overlay instanceof Marker) {
+                GeoPoint point = ((Marker) overlay).getPosition();
+                return new BoundingBox(point.getLatitude(), point.getLongitude(), 
+                                     point.getLatitude(), point.getLongitude());
+            }
+        } catch (Exception e) {
+            // Fallback: if getBounds fails, assume overlay is always visible
+        }
+        // For other overlay types, assume they're always visible
+        return null;
+    }
+    
+    /**
+     * ENHANCED FIX: Assign overlay to appropriate layer automatically
+     * @since Enhanced layer system
+     */
+    private void assignOverlayToLayer(Overlay overlay) {
+        OverlayLayer layer = determineOverlayLayer(overlay);
+        assignOverlayToLayer(overlay, layer);
+    }
+    
+    /**
+     * ENHANCED FIX: Assign overlay to specific layer
+     * @since Enhanced layer system
+     */
+    public void assignOverlayToLayer(Overlay overlay, OverlayLayer layer) {
+        // Remove from current layer if assigned
+        removeOverlayFromLayer(overlay);
+        
+        // Add to new layer
+        List<Overlay> layerList = mLayeredOverlays.get(layer);
+        if (layerList != null && !layerList.contains(overlay)) {
+            layerList.add(overlay);
+            mOverlayToLayer.put(overlay, layer);
+        }
+    }
+    
+    /**
+     * ENHANCED FIX: Remove overlay from its current layer
+     * @since Enhanced layer system
+     */
+    private void removeOverlayFromLayer(Overlay overlay) {
+        OverlayLayer currentLayer = mOverlayToLayer.get(overlay);
+        if (currentLayer != null) {
+            List<Overlay> layerList = mLayeredOverlays.get(currentLayer);
+            if (layerList != null) {
+                layerList.remove(overlay);
+            }
+            mOverlayToLayer.remove(overlay);
+        }
+    }
+    
+    /**
+     * ENHANCED FIX: Automatically determine appropriate layer for overlay
+     * @since Enhanced layer system
+     */
+    private OverlayLayer determineOverlayLayer(Overlay overlay) {
+        // Tiles and base maps
+        if (overlay instanceof TilesOverlay) {
+            return OverlayLayer.BACKGROUND_TILES;
+        }
+        
+        // Interactive markers and clickable items
+        if (overlay instanceof Marker) {
+            // Check if it's a tiny decorative marker
+            Marker marker = (Marker) overlay;
+            if (isDecorationMarker(marker)) {
+                return OverlayLayer.DECORATION;
+            }
+            return OverlayLayer.INTERACTIVE_CONTENT;
+        }
+        
+        if (overlay instanceof ItemizedIconOverlay || overlay instanceof ClickableIconOverlay) {
+            return OverlayLayer.INTERACTIVE_CONTENT;
+        }
+        
+        // Polylines and polygons
+        if (overlay instanceof Polyline || overlay instanceof Polygon) {
+            // Check if it's user-drawn (you can add custom logic here)
+            if (isUserDrawnOverlay(overlay)) {
+                return OverlayLayer.USER_DRAWING;
+            }
+            // Since we can't access click listener directly, use other indicators for interactivity
+            if (overlay instanceof PolyOverlayWithIW) {
+                PolyOverlayWithIW polyOverlay = (PolyOverlayWithIW) overlay;
+                // Check if it has info window or other interactive features
+                if (polyOverlay.getInfoWindow() != null || polyOverlay.getTitle() != null) {
+                    return OverlayLayer.INTERACTIVE_BACKGROUND;
+                }
+            }
+            return OverlayLayer.MAIN_CONTENT;
+        }
+        
+        // Folder overlays
+        if (overlay instanceof FolderOverlay) {
+            if (hasInteractiveChildren((FolderOverlay) overlay)) {
+                return OverlayLayer.INTERACTIVE_CONTENT;
+            }
+            return OverlayLayer.MAIN_CONTENT;
+        }
+        
+        // Default to main content
+        return OverlayLayer.MAIN_CONTENT;
+    }
+    
+    /**
+     * ENHANCED FIX: Check if marker is decorative (tiny, non-interactive)
+     * @since Enhanced layer system
+     */
+    private boolean isDecorationMarker(Marker marker) {
+        // Decorative markers typically have no title, snippet, and are not draggable
+        // Since we can't access the click listener directly, we use other indicators
+        return marker.getTitle() == null && 
+               marker.getSnippet() == null && 
+               !marker.isDraggable() &&
+               marker.getInfoWindow() == null;
+    }
+    
+    /**
+     * ENHANCED FIX: Check if overlay is user-drawn
+     * @since Enhanced layer system
+     */
+    private boolean isUserDrawnOverlay(Overlay overlay) {
+        // You can add custom logic here to identify user-drawn overlays
+        // For example, check for specific tags, properties, or naming conventions
+        
+        // Example: Check if overlay has a specific ID pattern
+        if (overlay instanceof Marker) {
+            Marker marker = (Marker) overlay;
+            String title = marker.getTitle();
+            return title != null && title.startsWith("USER_DRAWN_");
+        }
+        
+        if (overlay instanceof Polyline) {
+            // You could check for custom properties or use reflection if needed
+            // For now, return false - users can manually assign to USER_DRAWING layer
+        }
+        
+        return false; // Default implementation
+    }
+    
+    /**
+     * ENHANCED FIX: Helper method to mark overlay as interactive
+     * Since we can't detect click listeners directly, provide manual method
+     * @since Enhanced layer system
+     */
+    public void markAsInteractive(Overlay overlay) {
+        if (overlay instanceof Marker) {
+            assignOverlayToLayer(overlay, OverlayLayer.INTERACTIVE_CONTENT);
+        } else if (overlay instanceof Polyline || overlay instanceof Polygon) {
+            assignOverlayToLayer(overlay, OverlayLayer.INTERACTIVE_BACKGROUND);
+        }
+    }
+    
+    /**
+     * ENHANCED FIX: Helper method to mark overlay as decoration
+     * @since Enhanced layer system
+     */
+    public void markAsDecoration(Overlay overlay) {
+        assignOverlayToLayer(overlay, OverlayLayer.DECORATION);
+    }
+    
+    /**
+     * ENHANCED FIX: Helper method to mark overlay as user-drawn
+     * @since Enhanced layer system
+     */
+    public void markAsUserDrawn(Overlay overlay) {
+        assignOverlayToLayer(overlay, OverlayLayer.USER_DRAWING);
+    }
+    
+    /**
+     * ENHANCED FIX: Check if folder contains interactive overlays
+     * @since Enhanced layer system
+     */
+    private boolean hasInteractiveChildren(FolderOverlay folder) {
+        for (Overlay child : folder.getItems()) {
+            OverlayLayer childLayer = determineOverlayLayer(child);
+            if (isInteractiveLayer(childLayer)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * ENHANCED FIX: Check if layer is interactive
+     * @since Enhanced layer system
+     */
+    private boolean isInteractiveLayer(OverlayLayer layer) {
+        return layer == OverlayLayer.INTERACTIVE_CONTENT ||
+               layer == OverlayLayer.INTERACTIVE_BACKGROUND ||
+               layer == OverlayLayer.OVERLAY_CONTROLS ||
+               layer == OverlayLayer.POPUP_CONTENT;
+    }
+    
+    /**
+     * ENHANCED FIX: Get nearby overlays in specific layer
+     * @since Enhanced layer system
+     */
+    private List<Overlay> getNearbyOverlaysInLayer(MotionEvent e, MapView mapView, OverlayLayer layer) {
+        updateVisibleOverlaysIfNeeded(mapView);
+        
+        final int x = Math.round(e.getX());
+        final int y = Math.round(e.getY());
+        
+        List<Overlay> nearbyOverlays = getOverlaysNearPoint(x, y, mapView);
+        List<Overlay> layerNearby = new ArrayList<>();
+        
+        List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
+        if (layerOverlays != null) {
+            for (Overlay overlay : nearbyOverlays) {
+                if (layerOverlays.contains(overlay)) {
+                    layerNearby.add(overlay);
+                }
+            }
+        }
+        
+        return layerNearby;
+    }
+    
+    /**
+     * ENHANCED FIX: Enable/disable layer system
+     * @since Enhanced layer system
+     */
+    public void setUseLayerSystem(boolean useLayerSystem) {
+        mUseLayerSystem = useLayerSystem;
+        if (useLayerSystem) {
+            // Reassign all existing overlays to appropriate layers
+            for (OverlayLayer layer : OverlayLayer.values()) {
+                mLayeredOverlays.get(layer).clear();
+            }
+            mOverlayToLayer.clear();
+            
+            for (Overlay overlay : mOverlayList) {
+                assignOverlayToLayer(overlay);
+            }
+        }
+    }
+    
+    /**
+     * ENHANCED FIX: Check if layer system is enabled
+     * @since Enhanced layer system
+     */
+    public boolean isUsingLayerSystem() {
+        return mUseLayerSystem;
+    }
+    
+    /**
+     * ENHANCED FIX: Get overlay's current layer
+     * @since Enhanced layer system
+     */
+    public OverlayLayer getOverlayLayer(Overlay overlay) {
+        return mOverlayToLayer.get(overlay);
+    }
+    
+    /**
+     * ENHANCED FIX: Get all overlays in a specific layer
+     * @since Enhanced layer system
+     */
+    public List<Overlay> getOverlaysInLayer(OverlayLayer layer) {
+        List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
+        return layerOverlays != null ? new ArrayList<>(layerOverlays) : new ArrayList<>();
     }
 
     /* OnGestureListener */
