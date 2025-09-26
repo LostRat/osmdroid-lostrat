@@ -22,6 +22,7 @@ import org.mapsforge.map.rendertheme.rule.RenderThemeFuture;
 import org.mapsforge.map.layer.labels.MapDataStoreLabelStore;
 import org.osmdroid.api.IMapView;
 import org.osmdroid.tileprovider.tilesource.BitmapTileSourceBase;
+import org.osmdroid.util.DisplayDensityManager;
 import org.osmdroid.util.MapTileIndex;
 import org.osmdroid.views.MapView;
 
@@ -154,12 +155,18 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
     }
 
     /**
-     * Initialize MapsForge with Application context
+     * Initialize MapsForge with Application context and density management
      */
     public static void createInstance(Application app) {
         sAssetManager = app.getApplicationContext().getAssets();
         sResources = app.getResources();
         AndroidGraphicFactory.createInstance(app);
+        
+        // Initialize density manager for consistent scaling
+        DisplayDensityManager.initialize(app);
+        
+        Log.d(IMapView.LOGTAG, "MapsForgeTileSource initialized with density: " + 
+                DisplayDensityManager.getInstance().getDensityCategory());
     }
 
     /**
@@ -283,8 +290,31 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
         Log.w(IMapView.LOGTAG, "TileRefresher is obsolete in newer MapsForge versions");
     }
 
+    /**
+     * Set custom user scale factor (overrides automatic density scaling)
+     */
     public void setUserScaleFactor(float scaleFactor) {
         model.setUserScaleFactor(scaleFactor);
+        Log.d(IMapView.LOGTAG, "MapForge scale factor set to: " + scaleFactor);
+    }
+    
+    /**
+     * Apply automatic density-aware scaling (recommended)
+     */
+    public void applyDensityScaling() {
+        if (DisplayDensityManager.getInstance() != null) {
+            float autoScale = DisplayDensityManager.getInstance().getMapForgeScaleFactor();
+            model.setUserScaleFactor(autoScale);
+            Log.d(IMapView.LOGTAG, "Applied automatic MapForge scaling: " + autoScale + 
+                    " for density: " + DisplayDensityManager.getInstance().getDensityCategory());
+        }
+    }
+    
+    /**
+     * Get the current user scale factor
+     */
+    public float getUserScaleFactor() {
+        return model.getUserScaleFactor();
     }
 
 
