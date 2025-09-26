@@ -2,11 +2,15 @@ package org.osmdroid.tileprovider.modules;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteCursor;
+import android.database.sqlite.SQLiteCursorDriver;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteFullException;
+import android.database.sqlite.SQLiteQuery;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.Log;
 
 import org.osmdroid.api.IMapView;
@@ -742,50 +746,132 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
         }
         synchronized (mLock) {
             Configuration.getInstance().getOsmdroidTileCache().mkdirs();
-            db_file = new File(Configuration.getInstance().getOsmdroidTileCache().getAbsolutePath() + File.separator + DATABASE_FILENAME);
+            db_file = new File(
+                    Configuration.getInstance().getOsmdroidTileCache().getAbsolutePath()
+                            + File.separator + DATABASE_FILENAME
+            );
+
             if (mDb == null) {
                 try {
                     mDb = SQLiteDatabase.openOrCreateDatabase(db_file, null);
-                    
-                    // Check if database is writable before applying optimizations
+
                     if (mDb.isReadOnly()) {
-                        Log.w(IMapView.LOGTAG, "Database opened in read-only mode, tile caching will be disabled");
-                        mDb.close();
-                        mDb = null;
+                        Log.w(
+                                IMapView.LOGTAG,
+                                "Database opened in read-only mode, tile caching will be disabled"
+                        );
+                        safeClose();
                         return null;
                     }
-                    
-                    // Create table first before applying optimizations
-                    mDb.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE + " (" + DatabaseFileArchive.COLUMN_KEY + " INTEGER , " + DatabaseFileArchive.COLUMN_PROVIDER + " TEXT, " + DatabaseFileArchive.COLUMN_TILE + " BLOB, " + COLUMN_EXPIRES + " INTEGER, PRIMARY KEY (" + DatabaseFileArchive.COLUMN_KEY + ", " + DatabaseFileArchive.COLUMN_PROVIDER + "));");
-                    
-                    // Apply optimizations with error handling
-                    try {
-                        // API 23+ optimizations: Enable WAL mode and performance settings
-                        mDb.enableWriteAheadLogging();
-                        mDb.execSQL("PRAGMA synchronous = NORMAL");
-                        mDb.execSQL("PRAGMA cache_size = 10000");
-                        mDb.execSQL("PRAGMA temp_store = MEMORY");
-                        mDb.execSQL("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
-                    } catch (Exception pragmaEx) {
-                        Log.w(IMapView.LOGTAG, "Failed to apply database optimizations, continuing with basic setup", pragmaEx);
-                        // Continue without optimizations if they fail
-                    }
+
+                    // Create table first. execSQL is safe for CREATE TABLE on all versions.
+                    mDb.execSQL(
+                            "CREATE TABLE IF NOT EXISTS " + TABLE + " ("
+                                    + DatabaseFileArchive.COLUMN_KEY + " INTEGER , "
+                                    + DatabaseFileArchive.COLUMN_PROVIDER + " TEXT, "
+                                    + DatabaseFileArchive.COLUMN_TILE + " BLOB, "
+                                    + COLUMN_EXPIRES + " INTEGER, "
+                                    + "PRIMARY KEY (" + DatabaseFileArchive.COLUMN_KEY + ", "
+                                    + DatabaseFileArchive.COLUMN_PROVIDER + "));"
+                    );
+
+                    // Apply optimizations based on Android version
+                    applyDatabaseOptimizations();
+
                 } catch (Exception ex) {
-                    Log.e(IMapView.LOGTAG, "Unable to start the sqlite tile writer. Check external storage availability.", ex);
-                    if (mDb != null) {
-                        try {
-                            mDb.close();
-                        } catch (Exception closeEx) {
-                            // Ignore close errors
-                        }
-                        mDb = null;
-                    }
+                    Log.e(
+                            IMapView.LOGTAG,
+                            "Unable to start the sqlite tile writer. Check external storage availability.",
+                            ex
+                    );
+                    safeClose();
                     catchException(ex);
                     return null;
                 }
             }
         }
         return mDb;
+    }
+
+    private void applyDatabaseOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) { // Android 9.0
+                // For API 28+, we MUST use rawQuery for PRAGMA statements.
+                applyApi28PlusOptimizations();
+            } else {
+                // For API 23-27, the standard execSQL method is safe and effective.
+                applyLegacyOptimizations();
+            }
+        } catch (Exception e) {
+            Log.w(
+                    IMapView.LOGTAG,
+                    "Failed to apply database optimizations, continuing with basic setup",
+                    e
+            );
+            // The database will still function, just without performance tuning.
+        }
+    }
+
+    /**
+     * Applies optimizations for Android versions before 9.0 (API < 28).
+     * This method uses the standard `execSQL` for PRAGMA statements.
+     */
+    private void applyLegacyOptimizations() {
+        mDb.enableWriteAheadLogging();
+        mDb.execSQL("PRAGMA synchronous = NORMAL");
+        mDb.execSQL("PRAGMA cache_size = 10000");
+        mDb.execSQL("PRAGMA temp_store = MEMORY");
+        mDb.execSQL("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
+        Log.d(IMapView.LOGTAG, "Applied legacy database optimizations (API 23-27)");
+    }
+
+    /**
+     * Applies optimizations for Android 9.0+ (API >= 28).
+     * This method uses `rawQuery` exclusively for all PRAGMA statements
+     * to avoid the `SQLiteException`.
+     */
+    private void applyApi28PlusOptimizations() {
+        // Enable WAL mode using rawQuery, as enableWriteAheadLogging() can be unreliable.
+        executeRawPragma("PRAGMA journal_mode = WAL");
+
+        executeRawPragma("PRAGMA synchronous = NORMAL");
+        executeRawPragma("PRAGMA cache_size = 10000");
+        executeRawPragma("PRAGMA temp_store = MEMORY");
+        executeRawPragma("PRAGMA journal_size_limit = 67108864"); // 64MB journal limit
+        Log.d(IMapView.LOGTAG, "Applied modern database optimizations (API 28+)");
+    }
+
+    /**
+     * Executes a PRAGMA statement using rawQuery and ensures the returned cursor is closed.
+     * @param pragma The full PRAGMA statement to execute.
+     */
+    private void executeRawPragma(String pragma) {
+        Cursor cursor = null;
+        try {
+            cursor = mDb.rawQuery(pragma, null);
+            if (cursor != null) {
+                // We must do something with the cursor to ensure the query is executed.
+                // getCount() is a lightweight way to do this.
+                cursor.getCount();
+            }
+        } catch (Exception e) {
+            Log.w(IMapView.LOGTAG, "Failed to execute pragma: " + pragma, e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    }
+
+    private void safeClose() {
+        if (mDb != null) {
+            try {
+                mDb.close();
+            } catch (Exception ignored) {
+                // Ignore close errors
+            }
+            mDb = null;
+        }
     }
 
     /**
