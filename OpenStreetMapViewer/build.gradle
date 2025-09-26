@@ -178,8 +178,8 @@ dependencies {
     }
     
     // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
-    implementation 'androidx.sqlite:sqlite:2.6.0'
-    implementation 'androidx.sqlite:sqlite-framework:2.6.0'
+    implementation 'androidx.sqlite:sqlite:2.6.1'
+    implementation 'androidx.sqlite:sqlite-framework:2.6.1'
 
 
 
