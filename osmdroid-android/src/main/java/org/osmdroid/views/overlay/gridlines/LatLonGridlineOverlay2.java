@@ -6,6 +6,7 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Typeface;
 
+import org.osmdroid.util.DisplayDensityManager;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
@@ -31,20 +32,28 @@ public class LatLonGridlineOverlay2 extends Overlay {
     protected Paint mTextPaint = new Paint();
     protected  GeoPoint mOptimizationGeoPoint = new GeoPoint(0., 0);
     protected  Point mOptimizationPoint = new Point();
+    
+    // Density-aware scaling
+    private boolean mDensityScalingEnabled = true;
+    
+    // Text size options
+    public enum TextSize { SMALLEST, SMALLER, NORMAL, LARGER, LARGEST }
+    private TextSize mTextSizeOption = TextSize.NORMAL;
+    private float mCornerRadius = 4f;
 
     public LatLonGridlineOverlay2() {
         mLinePaint.setAntiAlias(true);
         mLinePaint.setStyle(Paint.Style.STROKE);
         mTextBackgroundPaint.setStyle(Paint.Style.FILL);
         mTextPaint.setAntiAlias(true);
-        mTextPaint.setStyle(Paint.Style.STROKE);
+        mTextPaint.setStyle(Paint.Style.FILL);
         mTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mTextPaint.setTextAlign(Paint.Align.CENTER);
         setLineColor(Color.BLACK);
         setFontColor(Color.WHITE);
         setBackgroundColor(Color.BLACK);
         setLineWidth(1f);
-        setFontSizeDp((short) 32);
+        setFontSizeDp((short) 16); // Smaller default size
     }
 
     @Override
@@ -140,7 +149,13 @@ public class LatLonGridlineOverlay2 extends Overlay {
                         stillVisible = squaredDistanceToCenter <= squaredScreenRadius;
                         if (stillVisible) {
                             if (lineOrText == 0) { // draw lines
-                                c.drawLine(xA, yA, xB, yB, mLinePaint);
+                                // Apply density-aware line scaling
+                                Paint linePaint = mLinePaint;
+                                if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+                                    linePaint = new Paint(mLinePaint);
+                                    linePaint.setStrokeWidth(DisplayDensityManager.getInstance().getScaledLineWidth(mLinePaint.getStrokeWidth()));
+                                }
+                                c.drawLine(xA, yA, xB, yB, linePaint);
                             } else { // draw text
                                 final String text = formatCoordinate(latOrLon == 0 ? latitude : longitude, latOrLon == 0);
                                 float textCenterX = latOrLon == 0 ? textOffsetX : xA;
@@ -151,10 +166,32 @@ public class LatLonGridlineOverlay2 extends Overlay {
                                     c.save();
                                     c.rotate(orientation, textCenterX, textCenterY);
                                 }
-                                c.drawRect(textCenterX - textWidth / 2f, textCenterY - textHeight / 2f,
-                                        textCenterX + textWidth / 2f, textCenterY + textHeight / 2f,
-                                        mTextBackgroundPaint);
-                                c.drawText(text, textCenterX, textCenterY + textHeight / 2 - textDescent, mTextPaint);
+                                // This drawRect call is now handled in the text drawing section above
+                                // Apply density-aware text scaling with size option
+                                Paint textPaint = new Paint(mTextPaint);
+                                float baseSize = mTextPaint.getTextSize();
+                                
+                                // Apply text size multiplier
+                                float sizeMultiplier = getTextSizeMultiplier();
+                                baseSize *= sizeMultiplier;
+                                
+                                if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+                                    baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
+                                }
+                                textPaint.setTextSize(baseSize);
+                                
+                                // Recalculate text dimensions with new size
+                                final float actualTextWidth = textPaint.measureText(text) + 4f; // padding
+                                final float actualTextBaseline = -textPaint.ascent() + 2f;
+                                final float actualTextDescent = textPaint.descent() + 2f;
+                                final float actualTextHeight = actualTextBaseline + actualTextDescent;
+                                
+                                // Draw rounded rectangle background
+                                c.drawRoundRect(textCenterX - actualTextWidth / 2f, textCenterY - actualTextHeight / 2f,
+                                        textCenterX + actualTextWidth / 2f, textCenterY + actualTextHeight / 2f,
+                                        mCornerRadius, mCornerRadius, mTextBackgroundPaint);
+                                        
+                                c.drawText(text, textCenterX, textCenterY + actualTextHeight / 2 - actualTextDescent, textPaint);
                                 if (orientation != 0) {
                                     c.restore();
                                 }
@@ -315,6 +352,46 @@ public class LatLonGridlineOverlay2 extends Overlay {
             result += pIncrementor;
         }
         return result;
+    }
+
+    /**
+     * Enable or disable automatic density scaling
+     * @param enabled true to enable density-aware scaling
+     */
+    public void setDensityScalingEnabled(boolean enabled) {
+        mDensityScalingEnabled = enabled;
+    }
+    
+    /**
+     * Check if density scaling is enabled
+     */
+    public boolean isDensityScalingEnabled() {
+        return mDensityScalingEnabled;
+    }
+    
+    /**
+     * Set text size option
+     */
+    public void setTextSizeOption(TextSize textSize) {
+        mTextSizeOption = textSize;
+    }
+    
+    /**
+     * Set corner radius for text background
+     */
+    public void setCornerRadius(float radius) {
+        mCornerRadius = radius;
+    }
+    
+    private float getTextSizeMultiplier() {
+        switch (mTextSizeOption) {
+            case SMALLEST: return 0.6f;
+            case SMALLER: return 0.8f;
+            case NORMAL: return 1.0f;
+            case LARGER: return 1.2f;
+            case LARGEST: return 1.5f;
+            default: return 1.0f;
+        }
     }
 
     /**

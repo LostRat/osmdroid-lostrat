@@ -12,6 +12,7 @@ import android.view.WindowManager;
 
 import org.osmdroid.api.IGeoPoint;
 import org.osmdroid.library.R;
+import org.osmdroid.util.DisplayDensityManager;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.constants.GeoConstants;
 import org.osmdroid.views.MapView;
@@ -95,10 +96,18 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     private Paint barPaint;
     private Paint bgPaint;
     private Paint textPaint;
+    private Paint textBackgroundPaint;
 
     private boolean centred = false;
     private boolean adjustLength = false;
     private float maxLength;
+    
+    // Enhanced styling options
+    public enum TextSize { SMALLEST, SMALLER, NORMAL, LARGER, LARGEST }
+    private TextSize mTextSizeOption = TextSize.NORMAL;
+    private boolean mDensityScalingEnabled = true;
+    private float mCornerRadius = 4f;
+    private boolean mTextBackgroundEnabled = true;
 
     /**
      * @since 6.1.0
@@ -142,7 +151,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         this.barPaint.setAntiAlias(true);
         this.barPaint.setStyle(Style.STROKE);
         this.barPaint.setAlpha(255);
-        this.barPaint.setStrokeWidth(2 * dm.density);
+        this.barPaint.setStrokeWidth(1.5f * dm.density); // Thinner crossbar
         this.bgPaint = null;
 
         this.textPaint = new Paint();
@@ -150,7 +159,13 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         this.textPaint.setAntiAlias(true);
         this.textPaint.setStyle(Style.FILL);
         this.textPaint.setAlpha(255);
-        this.textPaint.setTextSize(10 * dm.density);
+        this.textPaint.setTextSize(6f * dm.density); // 40% smaller than 12dp
+        
+        // Text background paint
+        this.textBackgroundPaint = new Paint();
+        this.textBackgroundPaint.setColor(Color.BLACK);
+        this.textBackgroundPaint.setStyle(Style.FILL);
+        this.textBackgroundPaint.setAlpha(200);
 
         this.xdpi = dm.xdpi;
         this.ydpi = dm.ydpi;
@@ -415,7 +430,14 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
             c.drawRect(longitudeBarRect.left, longitudeBarRect.top + offsetTop,
                     longitudeBarRect.right, longitudeBarRect.bottom, bgPaint);
         }
-        c.drawPath(barPath, barPaint);
+        // Apply density-aware line scaling
+        Paint scaledBarPaint = barPaint;
+        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+            scaledBarPaint = new Paint(barPaint);
+            scaledBarPaint.setStrokeWidth(DisplayDensityManager.getInstance().getScaledLineWidth(barPaint.getStrokeWidth()));
+        }
+        c.drawPath(barPath, scaledBarPaint);
+        
         if (latitudeBar) {
             drawLatitudeText(c, projection);
         }
@@ -460,13 +482,39 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         textPaint.getTextBounds(xMsg, 0, xMsg.length(), sTextBoundsRect);
         final int xTextSpacing = (int) (sTextBoundsRect.height() / 5.0);
 
+        // Apply density-aware text scaling with size option
+        Paint scaledTextPaint = new Paint(textPaint);
+        float baseSize = textPaint.getTextSize();
+        
+        // Apply text size multiplier
+        float sizeMultiplier = getTextSizeMultiplier();
+        baseSize *= sizeMultiplier;
+        
+        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+            baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
+        }
+        scaledTextPaint.setTextSize(baseSize);
+        scaledTextPaint.setColor(Color.WHITE); // Clean white text
+        
+        // Recalculate text bounds with scaled text
+        scaledTextPaint.getTextBounds(xMsg, 0, xMsg.length(), sTextBoundsRect);
+        
         float x = xBarLengthPixels / 2 - sTextBoundsRect.width() / 2;
         if (alignRight) x += screenWidth - xBarLengthPixels;
         float y;
         if (alignBottom) {
             y = screenHeight - xTextSpacing * 2;
         } else y = sTextBoundsRect.height() + xTextSpacing;
-        canvas.drawText(xMsg, x, y, textPaint);
+        
+        // Draw text background if enabled
+        if (mTextBackgroundEnabled) {
+            float padding = 6f; // More padding around text
+            canvas.drawRoundRect(x - padding, y - sTextBoundsRect.height() - padding,
+                    x + sTextBoundsRect.width() + padding, y + padding,
+                    mCornerRadius, mCornerRadius, textBackgroundPaint);
+        }
+        
+        canvas.drawText(xMsg, x, y, scaledTextPaint);
     }
 
     private void drawLongitudeText(final Canvas canvas, final Projection projection) {
@@ -494,15 +542,42 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         textPaint.getTextBounds(yMsg, 0, yMsg.length(), sTextBoundsRect);
         final int yTextSpacing = (int) (sTextBoundsRect.height() / 5.0);
 
+        // Apply density-aware text scaling with size option
+        Paint scaledTextPaint = new Paint(textPaint);
+        float baseSize = textPaint.getTextSize();
+        
+        // Apply text size multiplier
+        float sizeMultiplier = getTextSizeMultiplier();
+        baseSize *= sizeMultiplier;
+        
+        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+            baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
+        }
+        scaledTextPaint.setTextSize(baseSize);
+        scaledTextPaint.setColor(Color.WHITE); // Clean white text
+        
+        // Recalculate text bounds with scaled text
+        scaledTextPaint.getTextBounds(yMsg, 0, yMsg.length(), sTextBoundsRect);
+        
         float x;
         if (alignRight) {
             x = screenWidth - yTextSpacing * 2;
         } else x = sTextBoundsRect.height() + yTextSpacing;
         float y = yBarLengthPixels / 2 + sTextBoundsRect.width() / 2;
         if (alignBottom) y += screenHeight - yBarLengthPixels;
+        
         canvas.save();
         canvas.rotate(-90, x, y);
-        canvas.drawText(yMsg, x, y, textPaint);
+        
+        // Draw text background if enabled
+        if (mTextBackgroundEnabled) {
+            float padding = 6f; // More padding around text
+            canvas.drawRoundRect(-sTextBoundsRect.width() / 2 - padding, -sTextBoundsRect.height() / 2 - padding,
+                    sTextBoundsRect.width() / 2 + padding, sTextBoundsRect.height() / 2 + padding,
+                    mCornerRadius, mCornerRadius, textBackgroundPaint);
+        }
+        
+        canvas.drawText(yMsg, x, y, scaledTextPaint);
         canvas.restore();
     }
 
@@ -575,27 +650,32 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
             barToX = barOriginX - xBarLengthPixels;
         }
 
+        // Calculate enhanced end bar dimensions - taller uprights that extend down
+        float endBarHeight = xTextHeight * 2.0f; // Much taller uprights
+        float endBarWidth = yTextHeight * 2.0f;
+        
         if (latitudeBar) {
-            // draw latitude bar
-            barPath.moveTo(barToX, barOriginY + xTextHeight + xTextSpacing * 2);
-            barPath.lineTo(barToX, barOriginY);
+            // draw latitude bar with taller uprights extending down
+            barPath.moveTo(barToX, barOriginY + endBarHeight);
+            barPath.lineTo(barToX, barOriginY - endBarHeight * 0.3f); // Extend up a bit
+            barPath.moveTo(barToX, barOriginY);
             barPath.lineTo(barOriginX, barOriginY);
-
-            if (!longitudeBar) {
-                barPath.lineTo(barOriginX, barOriginY + xTextHeight + xTextSpacing * 2);
-            }
+            barPath.moveTo(barOriginX, barOriginY - endBarHeight * 0.3f); // Extend up a bit
+            barPath.lineTo(barOriginX, barOriginY + endBarHeight);
+            
             latitudeBarRect.set(barOriginX, barOriginY, barToX, barOriginY + xTextHeight + xTextSpacing * 2);
         }
 
         if (longitudeBar) {
-            // draw longitude bar
+            // draw longitude bar with taller uprights extending out
             if (!latitudeBar) {
-                barPath.moveTo(barOriginX + yTextHeight + yTextSpacing * 2, barOriginY);
-                barPath.lineTo(barOriginX, barOriginY);
+                barPath.moveTo(barOriginX + endBarWidth, barOriginY);
+                barPath.lineTo(barOriginX - endBarWidth * 0.3f, barOriginY); // Extend left a bit
+                barPath.moveTo(barOriginX, barOriginY);
             }
-
             barPath.lineTo(barOriginX, barToY);
-            barPath.lineTo(barOriginX + yTextHeight + yTextSpacing * 2, barToY);
+            barPath.moveTo(barOriginX - endBarWidth * 0.3f, barToY); // Extend left a bit
+            barPath.lineTo(barOriginX + endBarWidth, barToY);
 
             longitudeBarRect.set(barOriginX, barOriginY, barOriginX + yTextHeight + yTextSpacing * 2, barToY);
         }
@@ -726,6 +806,57 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     private int getMapWidth() {
         return mMapView != null ? mMapView.getWidth() : mMapWidth;
     }
+
+    /**
+     * Set text size option
+     */
+    public void setTextSizeOption(TextSize textSize) {
+        mTextSizeOption = textSize;
+        lastZoomLevel = -1; // Force redraw
+    }
+    
+    /**
+     * Enable or disable automatic density scaling
+     */
+    public void setDensityScalingEnabled(boolean enabled) {
+        mDensityScalingEnabled = enabled;
+        lastZoomLevel = -1; // Force redraw
+    }
+    
+    /**
+     * Check if density scaling is enabled
+     */
+    public boolean isDensityScalingEnabled() {
+        return mDensityScalingEnabled;
+    }
+    
+    /**
+     * Set corner radius for text background
+     */
+    public void setCornerRadius(float radius) {
+        mCornerRadius = radius;
+        lastZoomLevel = -1; // Force redraw
+    }
+    
+    /**
+     * Enable or disable text background boxes
+     */
+    public void setTextBackgroundEnabled(boolean enabled) {
+        mTextBackgroundEnabled = enabled;
+        lastZoomLevel = -1; // Force redraw
+    }
+    
+    private float getTextSizeMultiplier() {
+        switch (mTextSizeOption) {
+            case SMALLEST: return 0.6f;
+            case SMALLER: return 0.8f;
+            case NORMAL: return 1.0f;
+            case LARGER: return 1.2f;
+            case LARGEST: return 1.5f;
+            default: return 1.0f;
+        }
+    }
+
 
     /**
      * @since 6.1.0
