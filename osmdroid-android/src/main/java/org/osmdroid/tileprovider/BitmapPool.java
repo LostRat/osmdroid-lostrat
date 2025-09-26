@@ -145,7 +145,7 @@ public class BitmapPool {
     public void clearBitmapPool() {
         synchronized (sInstance.mPool) {
             while (!sInstance.mPool.isEmpty()) {
-                Bitmap bitmap = sInstance.mPool.remove();
+                Bitmap bitmap = sInstance.mPool.removeFirst();
                 bitmap.recycle();
             }
         }
