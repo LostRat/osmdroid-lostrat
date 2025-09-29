@@ -367,28 +367,28 @@ public class BoundingBox implements Parcelable, Serializable {
     }
 
     public boolean contains(final double aLatitude, final double aLongitude) {
-        boolean latMatch = false;
-        boolean lonMatch = false;
-        //FIXME there's still issues when there's multiple wrap arounds
+        // Check latitude first (cheaper, no wrapping complexity)
+        boolean latMatch;
         if (mLatNorth < mLatSouth) {
-            //either more than one world/wrapping or the bounding box is wrongish
-            latMatch = true;
+            latMatch = true;  // Wrapped vertically or invalid box
         } else {
-            //normal case
-            latMatch = ((aLatitude < this.mLatNorth) && (aLatitude > this.mLatSouth));
+            // Use <= and >= for inclusive boundaries (standard behavior)
+            latMatch = (aLatitude <= this.mLatNorth) && (aLatitude >= this.mLatSouth);
         }
 
+        // Early exit if latitude doesn't match
+        if (!latMatch) {
+            return false;
+        }
 
+        // Check longitude (handles international dateline crossing)
         if (mLonEast < mLonWest) {
-            //check longitude bounds with consideration for date line with wrapping
-            lonMatch = aLongitude <= mLonEast && aLongitude >= mLonWest;
-            //lonMatch = (aLongitude >= mLonEast || aLongitude <= mLonWest);
-
+            // Crosses dateline: point is valid if EITHER east of west OR west of east
+            return aLongitude >= mLonWest || aLongitude <= mLonEast;  // ✅ Fixed with ||
         } else {
-            lonMatch = ((aLongitude < this.mLonEast) && (aLongitude > this.mLonWest));
+            // Normal case: point between west and east
+            return (aLongitude <= this.mLonEast) && (aLongitude >= this.mLonWest);
         }
-
-        return latMatch && lonMatch;
     }
 
     // ===========================================================

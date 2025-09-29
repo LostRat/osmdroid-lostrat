@@ -140,11 +140,9 @@ public class MyMath implements MathConstants {
      * @since 6.1.0
      */
     public static double cleanPositiveAngle(double pAngle) {
-        while (pAngle < 0) {
+        pAngle = pAngle % 360;
+        if (pAngle < 0) {
             pAngle += 360;
-        }
-        while (pAngle >= 360) {
-            pAngle -= 360;
         }
         return pAngle;
     }

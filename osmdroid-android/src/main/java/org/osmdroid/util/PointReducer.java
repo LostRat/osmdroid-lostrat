@@ -133,21 +133,21 @@ public class PointReducer {
      * @return The distance in points coordinate system
      */
     public static double orthogonalDistance(GeoPoint point, GeoPoint lineStart, GeoPoint lineEnd) {
+        // Cache getter values (reduces method call overhead)
+        final double pLat = point.getLatitude();
+        final double pLon = point.getLongitude();
+        final double sLat = lineStart.getLatitude();
+        final double sLon = lineStart.getLongitude();
+        final double eLat = lineEnd.getLatitude();
+        final double eLon = lineEnd.getLongitude();
+
+        // Calculate area using cached values
         double area = Math.abs(
-                (
-                        lineStart.getLatitude() * lineEnd.getLongitude()
-                                + lineEnd.getLatitude() * point.getLongitude()
-                                + point.getLatitude() * lineStart.getLongitude()
-                                - lineEnd.getLatitude() * lineStart.getLongitude()
-                                - point.getLatitude() * lineEnd.getLongitude()
-                                - lineStart.getLatitude() * point.getLongitude()
-                ) / 2.0
+                (sLat * eLon + eLat * pLon + pLat * sLon
+                        - eLat * sLon - pLat * eLon - sLat * pLon) / 2.0
         );
 
-        double bottom = Math.hypot(
-                lineStart.getLatitude() - lineEnd.getLatitude(),
-                lineStart.getLongitude() - lineEnd.getLongitude()
-        );
+        double bottom = Math.hypot(sLat - eLat, sLon - eLon);
 
         return (area / bottom * 2.0);
     }

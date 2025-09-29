@@ -205,7 +205,7 @@ public class GeoPoint implements IGeoPoint, MathConstants, GeoConstants, Parcela
 
     @Override
     public int hashCode() {
-        return 37 * (17 * (int) (mLatitude * 1E-6) + (int) (mLongitude * 1E-6)) + (int) mAltitude;
+        return 37 * (17 * (int) (mLatitude * 1E6) + (int) (mLongitude * 1E6)) + (int) mAltitude;
     }
 
     // ===========================================================
@@ -256,10 +256,17 @@ public class GeoPoint implements IGeoPoint, MathConstants, GeoConstants, Parcela
         final double lat2 = DEG2RAD * other.getLatitude();
         final double lon1 = DEG2RAD * getLongitude();
         final double lon2 = DEG2RAD * other.getLongitude();
+
+        // Pre-compute sin values to avoid Math.pow(x, 2)
+        final double halfDeltaLat = (lat2 - lat1) / 2;
+        final double halfDeltaLon = (lon2 - lon1) / 2;
+        final double sinHalfDeltaLat = Math.sin(halfDeltaLat);
+        final double sinHalfDeltaLon = Math.sin(halfDeltaLon);
+
         return RADIUS_EARTH_METERS * 2 * Math.asin(Math.min(1, Math.sqrt(
-                Math.pow(Math.sin((lat2 - lat1) / 2), 2)
+                sinHalfDeltaLat * sinHalfDeltaLat
                         + Math.cos(lat1) * Math.cos(lat2)
-                        * Math.pow(Math.sin((lon2 - lon1) / 2), 2)
+                        * sinHalfDeltaLon * sinHalfDeltaLon
         )));
     }
 

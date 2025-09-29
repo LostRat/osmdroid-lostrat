@@ -2,8 +2,11 @@ package org.osmdroid.util;
 
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.util.ArrayMap;
 
 import org.osmdroid.util.constants.GeoConstants;
+
+import java.util.Map;
 
 /**
  * Proxy class for TileSystem. For coordinate conversions (tile to lat/lon and reverse) TileSystem
@@ -122,7 +125,24 @@ abstract public class TileSystem {
     /**
      * @since 6.0.0
      */
+// Add at class level (API 23+)
+    private static final Map<Integer, Double> ZOOM_FACTOR_CACHE = new ArrayMap<>(24);
+
+    static {
+        // Pre-compute common zoom levels (0-22 covers all practical cases)
+        for (int i = 0; i <= 22; i++) {
+            ZOOM_FACTOR_CACHE.put(i, Math.pow(2, i));
+        }
+    }
+
     public static double getFactor(final double pZoomLevel) {
+        // Fast path for integer zoom levels (most common case)
+        int intZoom = (int) pZoomLevel;
+        if (pZoomLevel == intZoom && ZOOM_FACTOR_CACHE.containsKey(intZoom)) {
+            return ZOOM_FACTOR_CACHE.get(intZoom);
+        }
+
+        // Fallback for fractional zoom levels
         return Math.pow(2, pZoomLevel);
     }
 
@@ -473,13 +493,21 @@ abstract public class TileSystem {
                     "interval must be equal or smaller than maxValue-minValue: " + "min: "
                             + minValue + " max:" + maxValue + " int:" + interval);
         }
-        while (n < minValue) {
-            n += interval;
+
+        // Fast path: already in range
+        if (n >= minValue && n <= maxValue) {
+            return n;
         }
-        while (n > maxValue) {
-            n -= interval;
+
+        // Wrap using modulo
+        double range = maxValue - minValue;
+        double offset = n - minValue;
+        double wrapped = offset % interval;
+        if (wrapped < 0) {
+            wrapped += interval;
         }
-        return n;
+
+        return minValue + wrapped;
     }
 
     /**
@@ -677,12 +705,18 @@ abstract public class TileSystem {
     public double cleanLongitude(final double pLongitude) {
         double result = pLongitude;
 
-        while (result < -180) {
+        // Fast path: already in range
+        if (result >= -180 && result <= 180) {
+            return Clip(result, getMinLongitude(), getMaxLongitude());
+        }
+
+        // Normalize to [-180, 180] using modulo
+        result = ((result + 180) % 360);
+        if (result < 0) {
             result += 360;
         }
-        while (result > 180) {
-            result -= 360;
-        }
+        result -= 180;
+
         return Clip(result, getMinLongitude(), getMaxLongitude());
     }
 
