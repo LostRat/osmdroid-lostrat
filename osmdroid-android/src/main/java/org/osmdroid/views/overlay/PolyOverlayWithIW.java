@@ -261,6 +261,9 @@ public abstract class PolyOverlayWithIW extends OverlayWithIW {
     private boolean isVisible(final Projection pProjection) {
         // projecting the center and a corner of the bounding box to the screen, close to the screen center
         final BoundingBox boundingBox = getBounds();
+        if (boundingBox == null) {
+            return false; // No points, not visible
+        }
         pProjection.toProjectedPixels(boundingBox.getCenterLatitude(), boundingBox.getCenterLongitude(),
                 mVisibilityProjectedCenter);
         pProjection.toProjectedPixels(boundingBox.getLatNorth(), boundingBox.getLonEast(),
