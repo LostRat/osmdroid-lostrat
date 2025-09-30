@@ -687,29 +687,60 @@ public abstract class PolyOverlayWithIW extends OverlayWithIW {
      */
     @Override
     public boolean onSingleTapConfirmed(final MotionEvent pEvent, final MapView pMapView) {
-        // API 23+ optimization: Early bounding box check before expensive path testing
-        if (!isInBoundingBox(pEvent, pMapView)) {
-            return false;
-        }
-        
         final Projection projection = pMapView.getProjection();
-        final GeoPoint eventPos = (GeoPoint) projection.fromPixels((int) pEvent.getX(), (int) pEvent.getY());
+        final GeoPoint eventPos = (GeoPoint) projection.fromPixels(
+                (int) pEvent.getX(), (int) pEvent.getY());
         final GeoPoint geoPoint;
-        if (mPath != null) {
-            // API 23+ optimization: Use cached hit test results
-            final boolean tapped = getCachedContains(pEvent, pMapView);
-            if (tapped) {
-                geoPoint = eventPos;
-            } else {
-                geoPoint = null;
+
+        if (mPath != null && mClosePath) {
+            // Only use contains() for closed paths (Polygons)
+            // API 23+ optimization: Early bounding box check with buffer
+            if (!isInBoundingBoxWithBuffer(pEvent, pMapView,
+                    mOutlinePaint.getStrokeWidth() * mDensity * mDensityMultiplier)) {
+                return false;
             }
+
+            final boolean tapped = getCachedContains(pEvent, pMapView);
+            geoPoint = tapped ? eventPos : null;
         } else {
-            final double tolerance = mOutlinePaint.getStrokeWidth() * mDensity * mDensityMultiplier;
+            // For polylines or non-path rendering, use proximity detection
+            final double tolerance = Math.max(
+                    mOutlinePaint.getStrokeWidth() * mDensity * mDensityMultiplier,
+                    10.0 // Minimum 10 pixel buffer for easier tapping
+            );
             geoPoint = getCloseTo(eventPos, tolerance, pMapView);
         }
+
         if (geoPoint != null) {
             return click(pMapView, geoPoint);
         }
         return false;
+    }
+
+
+    /**
+     * API 23+ optimization: Fast bounding box check with buffer for stroke width
+     */
+    private boolean isInBoundingBoxWithBuffer(MotionEvent event, MapView mapView,
+                                              double bufferPixels) {
+        BoundingBox bounds = getBounds();
+        if (bounds == null) return true;
+
+        Projection proj = mapView.getProjection();
+        GeoPoint eventPoint = (GeoPoint) proj.fromPixels(
+                (int) event.getX(), (int) event.getY());
+
+        // Convert buffer pixels to approximate degrees
+        double bufferDegrees = bufferPixels /
+                (mapView.getProjection().metersToPixels(111320) /
+                        mapView.getProjection().getZoomLevel());
+
+        return bounds.contains(eventPoint) ||
+                new BoundingBox(
+                        bounds.getLatNorth() + bufferDegrees,
+                        bounds.getLonEast() + bufferDegrees,
+                        bounds.getLatSouth() - bufferDegrees,
+                        bounds.getLonWest() - bufferDegrees
+                ).contains(eventPoint);
     }
 }
