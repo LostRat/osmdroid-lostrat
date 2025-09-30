@@ -13,8 +13,9 @@ import java.util.Set;
 
 public class ArchiveFileFactory {
 
-    static Map<String, Class<? extends IArchiveFile>> extensionMap = new HashMap<String, Class<? extends IArchiveFile>>();
-
+    // Known extensions: .zip, .mbtiles, .gemf, .sqlite, etc.
+    // Pre-size for ~6-8 entries (accounting for load factor 0.75)
+    static Map<String, Class<? extends IArchiveFile>> extensionMap = new HashMap<>(8);
     static {
         extensionMap.put("zip", ZipFileArchive.class);
         if (Build.VERSION.SDK_INT >= 10) {

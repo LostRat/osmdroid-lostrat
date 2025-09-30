@@ -292,21 +292,40 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
                                                                 cv.put(DatabaseFileArchive.COLUMN_PROVIDER, tileSources[i].getName());
                                                                 if (!exists(tileSources[i].getName(), MapTileIndex.getTileIndex((int) z1, (int) x1, (int) y1))) {
 
-                                                                    BufferedInputStream bis = new BufferedInputStream(new FileInputStream(y[yy]));
+                                                                    BufferedInputStream bis = null;
+                                                                    ByteArrayOutputStream baos = null;
+                                                                    try {
+                                                                        bis = new BufferedInputStream(new FileInputStream(y[yy]));
 
-                                                                    List<Byte> list = new ArrayList<Byte>();
-                                                                    //ByteArrayBuffer baf = new ByteArrayBuffer(500);
-                                                                    int current = 0;
-                                                                    while ((current = bis.read()) != -1) {
-                                                                        list.add((byte) current);
-                                                                    }
+                                                                        // Pre-allocate based on file size for best performance
+                                                                        final int fileSize = (int) y[yy].length();
+                                                                        baos = new ByteArrayOutputStream(fileSize);
 
-                                                                    byte[] bits = new byte[list.size()];
-                                                                    for (int bi = 0; bi < list.size(); bi++) {
-                                                                        bits[bi] = list.get(bi);
+                                                                        // Option A: Read byte-by-byte (simple, works)
+                                                                        int current;
+                                                                        while ((current = bis.read()) != -1) {
+                                                                            baos.write(current);
+                                                                        }
+
+                                                                        // Option B: Read in chunks (even faster for large files)
+                                                                        // byte[] buffer = new byte[8192];
+                                                                        // int bytesRead;
+                                                                        // while ((bytesRead = bis.read(buffer)) != -1) {
+                                                                        //     baos.write(buffer, 0, bytesRead);
+                                                                        // }
+
+                                                                        byte[] bits = baos.toByteArray();
+
+                                                                        cv.put(DatabaseFileArchive.COLUMN_KEY, index);
+                                                                        cv.put(DatabaseFileArchive.COLUMN_TILE, bits);
+                                                                    } finally {
+                                                                        if (bis != null) {
+                                                                            try { bis.close(); } catch (IOException e) { /* ignore */ }
+                                                                        }
+                                                                        if (baos != null) {
+                                                                            try { baos.close(); } catch (IOException e) { /* ignore */ }
+                                                                        }
                                                                     }
-                                                                    cv.put(DatabaseFileArchive.COLUMN_KEY, index);
-                                                                    cv.put(DatabaseFileArchive.COLUMN_TILE, bits);
 
                                                                     long insert = db.insert(TABLE, null, cv);
                                                                     if (insert > 0) {
@@ -582,8 +601,19 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
      * @return
      * @since 5.6.5
      */
+// Add at class level
+    private static final ThreadLocal<String[]> PARAM_ARRAY_CACHE = new ThreadLocal<String[]>() {
+        @Override
+        protected String[] initialValue() {
+            return new String[2];
+        }
+    };
+
     public static String[] getPrimaryKeyParameters(final long pIndex, final String pTileSourceInfo) {
-        return new String[]{String.valueOf(pIndex), pTileSourceInfo};
+        String[] params = PARAM_ARRAY_CACHE.get();
+        params[0] = String.valueOf(pIndex);
+        params[1] = pTileSourceInfo;
+        return params;
     }
 
     /**

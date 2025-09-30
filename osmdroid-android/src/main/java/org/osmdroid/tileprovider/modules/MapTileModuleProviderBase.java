@@ -1,6 +1,7 @@
 package org.osmdroid.tileprovider.modules;
 
 import android.graphics.drawable.Drawable;
+import android.util.ArrayMap;
 import android.util.Log;
 
 import org.osmdroid.api.IMapView;
@@ -89,7 +90,7 @@ public abstract class MapTileModuleProviderBase {
     private final ExecutorService mExecutor;
 
     protected final Object mQueueLockObject = new Object();
-    protected final HashMap<Long, MapTileRequestState> mWorking;
+    protected final Map<Long, MapTileRequestState> mWorking;  // Change to interface type
     protected final LinkedHashMap<Long, MapTileRequestState> mPending;
 
     public MapTileModuleProviderBase(int pThreadPoolSize, final int pPendingQueueSize) {
@@ -100,7 +101,10 @@ public abstract class MapTileModuleProviderBase {
         mExecutor = Executors.newFixedThreadPool(pThreadPoolSize,
                 new ConfigurablePriorityThreadFactory(Thread.NORM_PRIORITY, getThreadGroupName()));
 
-        mWorking = new HashMap<>();
+        // API 23+ always: Use ArrayMap for better memory efficiency
+        // Typical size: 4-20 entries (one per thread pool thread)
+        mWorking = new ArrayMap<>(pThreadPoolSize);
+
         mPending = new LinkedHashMap<Long, MapTileRequestState>(pPendingQueueSize + 2, 0.1f,
                 true) {
 

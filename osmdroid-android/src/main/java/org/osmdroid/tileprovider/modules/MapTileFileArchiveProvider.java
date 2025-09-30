@@ -36,7 +36,7 @@ public class MapTileFileArchiveProvider extends MapTileFileStorageProviderBase {
     // Fields
     // ===========================================================
 
-    private final ArrayList<IArchiveFile> mArchiveFiles = new ArrayList<IArchiveFile>();
+    private final ArrayList<IArchiveFile> mArchiveFiles = new ArrayList<>(8);
 
     private final AtomicReference<ITileSource> mTileSource = new AtomicReference<ITileSource>();
 
