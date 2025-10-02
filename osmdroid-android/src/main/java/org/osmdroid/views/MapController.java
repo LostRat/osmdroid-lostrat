@@ -24,6 +24,7 @@ import org.osmdroid.events.ZoomEvent;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.MyMath;
+import org.osmdroid.util.ObjectPool;
 import org.osmdroid.util.TileSystem;
 import org.osmdroid.views.MapView.OnFirstLayoutListener;
 
@@ -56,6 +57,20 @@ public class MapController implements IMapController, OnFirstLayoutListener {
 
     // Keep track of calls before initial layout
     private ReplayController mReplayController;
+
+    // Object pool for reducing GC pressure during animations
+    private final ObjectPool<GeoPoint> mGeoPointPool = new ObjectPool<GeoPoint>(5,
+            new ObjectPool.PoolableFactory<GeoPoint>() {
+                @Override
+                public GeoPoint create() {
+                    return new GeoPoint(0.0, 0.0);
+                }
+
+                @Override
+                public void reset(GeoPoint object) {
+                    object.setCoords(0.0, 0.0);
+                }
+            });
 
     // ===========================================================
     // Constructors
@@ -154,7 +169,10 @@ public class MapController implements IMapController, OnFirstLayoutListener {
             return;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            final IGeoPoint currentCenter = new GeoPoint(mMapView.getProjection().getCurrentCenter());
+            final GeoPoint currentCenter = mGeoPointPool.acquire();
+            GeoPoint centerPoint = mMapView.getProjection().getCurrentCenter();
+            currentCenter.setCoords(centerPoint.getLatitude(), centerPoint.getLongitude());
+
             final MapAnimatorListener mapAnimatorListener =
                     new MapAnimatorListener(this,
                             mMapView.getZoomLevelDouble(), pZoom,
@@ -174,6 +192,17 @@ public class MapController implements IMapController, OnFirstLayoutListener {
             }
             mapAnimator.setInterpolator(mInterpolator);
             mCurrentAnimator = mapAnimator;
+            mapAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(android.animation.Animator animation) {
+                    mGeoPointPool.release(currentCenter);
+                }
+
+                @Override
+                public void onAnimationCancel(android.animation.Animator animation) {
+                    mGeoPointPool.release(currentCenter);
+                }
+            });
             mapAnimator.start();
             return;
         }
