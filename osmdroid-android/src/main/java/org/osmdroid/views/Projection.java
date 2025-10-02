@@ -15,6 +15,8 @@ import org.osmdroid.util.PointL;
 import org.osmdroid.util.RectL;
 import org.osmdroid.util.TileSystem;
 
+import java.util.List;
+
 /**
  * A Projection serves to translate between the coordinate system of x/y on-screen pixel coordinates
  * and that of latitude/longitude points on the surface of the earth. You obtain a Projection from
@@ -48,16 +50,16 @@ public class Projection implements IProjection {
     private final float[] mRotateScalePoints = new float[2];
 
     private final BoundingBox mBoundingBoxProjection = new BoundingBox();
-    private final double mZoomLevelProjection;
+    private double mZoomLevelProjection;
     private final Rect mScreenRectProjection = new Rect();
     private final Rect mIntrinsicScreenRectProjection;
 
     private boolean horizontalWrapEnabled;
     private boolean verticalWrapEnabled;
 
-    private final double mMercatorMapSize;
-    private final double mTileSize;
-    private final float mOrientation;
+    private double mMercatorMapSize;
+    private double mTileSize;
+    private float mOrientation;
     private final GeoPoint mCurrentCenter = new GeoPoint(0., 0);
 
     private final TileSystem mTileSystem;
@@ -65,8 +67,8 @@ public class Projection implements IProjection {
     /**
      * @since 6.1.1
      */
-    private final int mMapCenterOffsetX;
-    private final int mMapCenterOffsetY;
+    private int mMapCenterOffsetX;
+    private int mMapCenterOffsetY;
 
     Projection(MapView mapView) {
         this(
@@ -128,6 +130,68 @@ public class Projection implements IProjection {
                 pHorizontalWrapEnabled, pVerticalWrapEnabled,
                 MapView.getTileSystem(),
                 pMapCenterOffsetX, pMapCenterOffsetY);
+    }
+
+    /**
+     * Updates this Projection's state from the MapView without creating a new object.
+     * Reuses existing objects to reduce garbage collection pressure.
+     * @param mapView the MapView to update from
+     * @since 6.1.22-lostrat
+     */
+    void update(MapView mapView) {
+        update(
+                mapView.getZoomLevelDouble(), mapView.getIntrinsicScreenRect(null),
+                mapView.getExpectedCenter(),
+                mapView.getMapScrollX(), mapView.getMapScrollY(),
+                mapView.getMapOrientation(),
+                mapView.isHorizontalMapRepetitionEnabled(), mapView.isVerticalMapRepetitionEnabled(),
+                mapView.getMapCenterOffsetX(),
+                mapView.getMapCenterOffsetY());
+    }
+
+    /**
+     * Updates projection state without creating a new object.
+     * @since 6.1.22-lostrat
+     */
+    private void update(
+            final double pZoomLevel, final Rect pScreenRect,
+            final GeoPoint pCenter,
+            final long pScrollX, final long pScrollY,
+            final float pOrientation,
+            final boolean pHorizontalWrapEnabled, final boolean pVerticalWrapEnabled,
+            final int pMapCenterOffsetX, final int pMapCenterOffsetY) {
+
+        // Update mutable fields
+        mZoomLevelProjection = pZoomLevel;
+        horizontalWrapEnabled = pHorizontalWrapEnabled;
+        verticalWrapEnabled = pVerticalWrapEnabled;
+        mMercatorMapSize = TileSystem.MapSize(mZoomLevelProjection);
+        mTileSize = TileSystem.getTileSize(mZoomLevelProjection);
+        mOrientation = pOrientation;
+        mMapCenterOffsetX = pMapCenterOffsetX;
+        mMapCenterOffsetY = pMapCenterOffsetY;
+
+        final GeoPoint center = pCenter != null ? pCenter : new GeoPoint(0., 0);
+        mCurrentCenter.setCoords(center.getLatitude(), center.getLongitude());
+        mIntrinsicScreenRectProjection.set(pScreenRect);
+        mScrollX = pScrollX;
+        mScrollY = pScrollY;
+
+        // Recalculate rotation matrices
+        mRotateAndScaleMatrix.reset();
+        mUnrotateAndScaleMatrix.reset();
+        if (mOrientation != 0) {
+            mRotateAndScaleMatrix.setRotate(mOrientation,
+                    mIntrinsicScreenRectProjection.exactCenterX(),
+                    mIntrinsicScreenRectProjection.exactCenterY());
+            mRotateAndScaleMatrix.invert(mUnrotateAndScaleMatrix);
+        }
+
+        // Recalculate offsets based on center
+        mOffsetX = getScreenCenterX() - mScrollX - mTileSystem.getMercatorXFromLongitude(center.getLongitude(), mMercatorMapSize, horizontalWrapEnabled);
+        mOffsetY = getScreenCenterY() - mScrollY - mTileSystem.getMercatorYFromLatitude(center.getLatitude(), mMercatorMapSize, verticalWrapEnabled);
+        
+        refresh();
     }
 
     /**
@@ -212,6 +276,44 @@ public class Projection implements IProjection {
         out.x = TileSystem.truncateToInt(getLongPixelXFromLongitude(in.getLongitude(), forceWrap));
         out.y = TileSystem.truncateToInt(getLongPixelYFromLatitude(in.getLatitude(), forceWrap));
         return out;
+    }
+
+    /**
+     * Batch converts multiple GeoPoints to pixel coordinates.
+     * More efficient than calling toPixels() repeatedly due to reduced method call overhead
+     * and pre-calculated common values.
+     * @param geoPoints list of geographic points to convert
+     * @param pixelPoints output list (must be same size as geoPoints)
+     * @throws IllegalArgumentException if lists are different sizes
+     * @since 6.1.22-lostrat
+     */
+    public void toPixelsBatch(final List<? extends IGeoPoint> geoPoints, final List<Point> pixelPoints) {
+        if (geoPoints.size() != pixelPoints.size()) {
+            throw new IllegalArgumentException("geoPoints and pixelPoints must be same size");
+        }
+
+        // Pre-calculate common values once for all conversions
+        final double mercatorMapSize = mMercatorMapSize;
+        final long offsetX = mOffsetX;
+        final long offsetY = mOffsetY;
+
+        for (int i = 0; i < geoPoints.size(); i++) {
+            final IGeoPoint geo = geoPoints.get(i);
+            Point pixel = pixelPoints.get(i);
+            if (pixel == null) {
+                pixel = new Point();
+                pixelPoints.set(i, pixel);
+            }
+
+            // Inline coordinate conversion to avoid method call overhead
+            final long mercatorX = mTileSystem.getMercatorXFromLongitude(
+                    geo.getLongitude(), mercatorMapSize, horizontalWrapEnabled);
+            final long mercatorY = mTileSystem.getMercatorYFromLatitude(
+                    geo.getLatitude(), mercatorMapSize, verticalWrapEnabled);
+
+            pixel.x = TileSystem.truncateToInt(getLongPixelXFromMercator(mercatorX, horizontalWrapEnabled));
+            pixel.y = TileSystem.truncateToInt(getLongPixelYFromMercator(mercatorY, verticalWrapEnabled));
+        }
     }
 
     /**

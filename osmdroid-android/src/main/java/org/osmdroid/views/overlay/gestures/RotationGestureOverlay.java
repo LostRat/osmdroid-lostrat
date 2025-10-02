@@ -37,6 +37,121 @@ public class RotationGestureOverlay extends Overlay implements
     private enum RotationState { IDLE, ROTATING }
     private RotationState mRotationState = RotationState.IDLE;
     private float mAccumulatedAngle = 0f;
+    
+    // Rotation smoothing and jitter prevention (inspired by game input systems)
+    private final RotationSmoother mRotationSmoother = new RotationSmoother();
+    
+    /**
+     * Inner class to handle rotation smoothing and jitter prevention.
+     * Uses techniques from game development:
+     * - Exponential smoothing (low-pass filter)
+     * - Velocity-based noise detection
+     * - Hysteresis for state transitions
+     */
+    private static class RotationSmoother {
+        // Thresholds
+        private static final float NOISE_THRESHOLD = 0.1f; // degrees - anything smaller is noise
+        private static final float START_THRESHOLD = 1.5f; // degrees - needed to start rotation
+        private static final float VELOCITY_THRESHOLD = 0.5f; // degrees/frame - minimum velocity to be intentional
+        private static final long STATIONARY_TIME = 100L; // ms - time before considering stationary
+        
+        // Smoothing factor (0-1, higher = more smoothing, lower = more responsive)
+        private static final float SMOOTHING_FACTOR = 0.3f;
+        
+        // State
+        private float mSmoothedAngle = 0f;
+        private float mPendingDelta = 0f;
+        private long mLastUpdateTime = 0L;
+        private boolean mIsActive = false;
+        private float mLastDelta = 0f;
+        
+        // Circular buffer for velocity calculation
+        private final float[] mRecentDeltas = new float[5];
+        private int mDeltaIndex = 0;
+        
+        /**
+         * Process a rotation delta and determine if it should be applied.
+         * 
+         * @param deltaAngle Raw delta from gesture detector
+         * @return Smoothed delta to apply, or 0 if should be ignored
+         */
+        public float processDelta(float deltaAngle) {
+            long currentTime = System.currentTimeMillis();
+            long timeDelta = currentTime - mLastUpdateTime;
+            
+            // Ignore extremely small deltas (sensor noise)
+            if (Math.abs(deltaAngle) < NOISE_THRESHOLD) {
+                // Check if we should transition to stationary
+                if (mIsActive && timeDelta > STATIONARY_TIME) {
+                    mIsActive = false;
+                    mPendingDelta = 0f;
+                }
+                return 0f;
+            }
+            
+            // Update velocity tracking
+            mRecentDeltas[mDeltaIndex] = deltaAngle;
+            mDeltaIndex = (mDeltaIndex + 1) % mRecentDeltas.length;
+            
+            // Calculate average velocity (helps distinguish intentional movement from jitter)
+            float avgVelocity = calculateAverageVelocity();
+            
+            // Accumulate pending delta
+            mPendingDelta += deltaAngle;
+            
+            // Determine threshold based on state
+            float threshold = mIsActive ? NOISE_THRESHOLD : START_THRESHOLD;
+            
+            // Check if we have enough accumulated delta to apply
+            if (Math.abs(mPendingDelta) >= threshold) {
+                // Apply exponential smoothing for fluid motion
+                float smoothedDelta = mIsActive 
+                    ? (mPendingDelta * SMOOTHING_FACTOR + mLastDelta * (1f - SMOOTHING_FACTOR))
+                    : mPendingDelta; // No smoothing on first movement
+                
+                mLastDelta = smoothedDelta;
+                mLastUpdateTime = currentTime;
+                mIsActive = true;
+                mPendingDelta = 0f;
+                
+                return smoothedDelta;
+            }
+            
+            mLastUpdateTime = currentTime;
+            return 0f;
+        }
+        
+        /**
+         * Calculate average velocity from recent deltas.
+         * Helps distinguish intentional movement from random jitter.
+         */
+        private float calculateAverageVelocity() {
+            float sum = 0f;
+            int count = 0;
+            for (float delta : mRecentDeltas) {
+                if (delta != 0f) {
+                    sum += Math.abs(delta);
+                    count++;
+                }
+            }
+            return count > 0 ? sum / count : 0f;
+        }
+        
+        /**
+         * Reset the smoother state.
+         */
+        public void reset() {
+            mSmoothedAngle = 0f;
+            mPendingDelta = 0f;
+            mIsActive = false;
+            mLastDelta = 0f;
+            mLastUpdateTime = 0L;
+            for (int i = 0; i < mRecentDeltas.length; i++) {
+                mRecentDeltas[i] = 0f;
+            }
+            mDeltaIndex = 0;
+        }
+    }
 
     /**
      * use {@link #RotationGestureOverlay(MapView)} instead.
@@ -72,19 +187,26 @@ public class RotationGestureOverlay extends Overlay implements
         if (mRotationState == RotationState.IDLE) {
             mRotationState = RotationState.ROTATING;
             mAccumulatedAngle = 0f;
+            mRotationSmoother.reset();
             onRotationGestureStarted(mMapView.getMapOrientation());
             notifyRotationStarted(mMapView.getMapOrientation());
         }
         
-        mAccumulatedAngle += deltaAngle;
+        // Process delta through smoother (game-style input filtering)
+        float smoothedDelta = mRotationSmoother.processDelta(deltaAngle);
         
-        // Apply rotation immediately - no throttling for smooth rotation
-        float newOrientation = mMapView.getMapOrientation() + deltaAngle;
-        mMapView.setMapOrientation(newOrientation);
-        
-        // Notify listeners
-        onRotationGestureDelta(deltaAngle, newOrientation);
-        notifyRotation(deltaAngle, newOrientation);
+        // Only apply if smoother determined this is intentional movement
+        if (smoothedDelta != 0f) {
+            mAccumulatedAngle += smoothedDelta;
+            
+            // Apply rotation
+            float newOrientation = mMapView.getMapOrientation() + smoothedDelta;
+            mMapView.setMapOrientation(newOrientation);
+            
+            // Notify listeners
+            onRotationGestureDelta(smoothedDelta, newOrientation);
+            notifyRotation(smoothedDelta, newOrientation);
+        }
     }
 
     @Override
