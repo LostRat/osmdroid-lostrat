@@ -16,6 +16,7 @@ import android.view.MotionEvent;
 
 import org.osmdroid.tileprovider.BitmapPool;
 import org.osmdroid.util.BoundingBox;
+import org.osmdroid.util.Distance;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.RectL;
 import org.osmdroid.views.MapView;
@@ -77,6 +78,25 @@ public class Marker extends OverlayWithIW {
     private MapViewRepository mMapViewRepository;
 
     /**
+     * Touch buffer in pixels for hit detection. Default is 10 pixels.
+     * Set to 0 to use exact bounds checking (legacy behavior).
+     * @since 6.3.0
+     */
+    protected float mTouchBuffer = 10.0f;
+
+    /**
+     * Cached density multiplier for touch buffer scaling
+     * @since 6.3.0
+     */
+    private float mDensity = 1.0f;
+
+    /**
+     * Global default touch buffer for new markers
+     * @since 6.3.0
+     */
+    private static float sDefaultTouchBuffer = 10.0f;
+
+    /**
      * Usual values in the (U,V) coordinates system of the icon image
      */
     public static final float ANCHOR_CENTER = 0.5f, ANCHOR_LEFT = 0.0f, ANCHOR_TOP = 0.0f, ANCHOR_RIGHT = 1.0f, ANCHOR_BOTTOM = 1.0f;
@@ -112,6 +132,9 @@ public class Marker extends OverlayWithIW {
         mFlat = false; //billboard
         mOnMarkerClickListener = null;
         mOnMarkerDragListener = null;
+        // Initialize density for touch buffer scaling
+        mDensity = mapView.getContext().getResources().getDisplayMetrics().density;
+        mTouchBuffer = sDefaultTouchBuffer;
         setDefaultIcon();
         setInfoWindow(mMapViewRepository.getDefaultMarkerInfoWindow());
     }
@@ -393,7 +416,49 @@ public class Marker extends OverlayWithIW {
     }
 
     public boolean hitTest(final MotionEvent event, final MapView mapView) {
-        return mIcon != null && mDisplayed && mOrientedMarkerRect.contains((int) event.getX(), (int) event.getY()); // "!=null": fix for #1078
+        // Keep existing null and display checks at the beginning
+        if (mIcon == null || !mDisplayed) {
+            return false;
+        }
+        
+        final int eventX = (int) event.getX();
+        final int eventY = (int) event.getY();
+        
+        // Fast path: exact bounds check (return true immediately if within exact bounds)
+        if (mOrientedMarkerRect.contains(eventX, eventY)) {
+            return true;
+        }
+        
+        // Early return if mTouchBuffer is zero or negative
+        if (mTouchBuffer <= 0) {
+            return false;
+        }
+        
+        // Calculate effective buffer with density scaling
+        final float effectiveBuffer = mTouchBuffer * mDensity;
+        
+        // Early exit check using expanded bounding box
+        final Rect expandedRect = new Rect(mOrientedMarkerRect);
+        expandedRect.inset(-(int) effectiveBuffer, -(int) effectiveBuffer);
+        if (!expandedRect.contains(eventX, eventY)) {
+            return false;
+        }
+        
+        // Implement center-based distance calculation using Distance.getSquaredDistanceToPoint()
+        final int centerX = mOrientedMarkerRect.centerX();
+        final int centerY = mOrientedMarkerRect.centerY();
+        final double squaredDistance = Distance.getSquaredDistanceToPoint(
+            eventX, eventY, centerX, centerY
+        );
+        
+        // Calculate maximum allowed squared distance (half diagonal + buffer)
+        final double halfWidth = mOrientedMarkerRect.width() / 2.0;
+        final double halfHeight = mOrientedMarkerRect.height() / 2.0;
+        final double maxDistance = Math.sqrt(halfWidth * halfWidth + halfHeight * halfHeight) + effectiveBuffer;
+        final double squaredMaxDistance = maxDistance * maxDistance;
+        
+        // Return comparison result of squared distances
+        return squaredDistance <= squaredMaxDistance;
     }
 
     @Override
@@ -479,6 +544,68 @@ public class Marker extends OverlayWithIW {
         if (marker.mPanToView)
             mapView.getController().animateTo(marker.getPosition());
         return true;
+    }
+
+    /**
+     * Set the touch buffer for hit detection in pixels.
+     * The buffer expands the tappable area around the marker icon, making it easier to tap.
+     * This is particularly useful on mobile devices where precise tapping can be difficult.
+     * 
+     * <p><b>Overlapping Markers:</b> When multiple markers have overlapping touch buffers,
+     * the tap event is handled by the first marker that responds, based on this priority order:</p>
+     * <ol>
+     *   <li><b>Layer priority:</b> Markers in higher z-index layers are checked first
+     *       (e.g., INTERACTIVE_CONTENT layer has priority over DECORATION layer)</li>
+     *   <li><b>Add order:</b> Within the same layer, the last marker added to the map is checked first</li>
+     *   <li><b>Distance:</b> If a marker's buffer doesn't reach the tap point, the next marker is checked</li>
+     * </ol>
+     * 
+     * <p>This means the marker closest to the tap point (within its buffer) will typically handle
+     * the tap, unless overridden by layer priority or add order. To control priority explicitly,
+     * use {@link DefaultOverlayManager#assignOverlayToLayer(Overlay, DefaultOverlayManager.OverlayLayer)}
+     * or adjust the buffer sizes.</p>
+     * 
+     * @param bufferPixels Buffer size in pixels. Use 0 for exact bounds checking (legacy behavior).
+     *                     Negative values will be clamped to 0. Default is 10 pixels.
+     * @since 6.3.0
+     * @see #getTouchBuffer()
+     * @see #setDefaultTouchBuffer(float)
+     */
+    public void setTouchBuffer(float bufferPixels) {
+        mTouchBuffer = Math.max(0, bufferPixels);
+    }
+
+    /**
+     * Get the current touch buffer size in pixels.
+     * The touch buffer expands the tappable area around the marker icon.
+     * 
+     * @return Touch buffer size in pixels
+     * @since 6.3.0
+     */
+    public float getTouchBuffer() {
+        return mTouchBuffer;
+    }
+
+    /**
+     * Set a global default touch buffer for all new markers.
+     * This affects markers created after this method is called.
+     * Individual markers can override this default using {@link #setTouchBuffer(float)}.
+     * 
+     * @param bufferPixels Default buffer size in pixels. Negative values will be clamped to 0.
+     * @since 6.3.0
+     */
+    public static void setDefaultTouchBuffer(float bufferPixels) {
+        sDefaultTouchBuffer = Math.max(0, bufferPixels);
+    }
+
+    /**
+     * Get the global default touch buffer size for new markers.
+     * 
+     * @return Default touch buffer size in pixels
+     * @since 6.3.0
+     */
+    public static float getDefaultTouchBuffer() {
+        return sDefaultTouchBuffer;
     }
 
     /**
