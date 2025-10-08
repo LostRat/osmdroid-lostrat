@@ -53,6 +53,7 @@ public abstract class Overlay implements OverlayConstants {
 
     private static final Rect mRect = new Rect();
     private boolean mEnabled = true;
+    private boolean mInteractive = true;
     private final TileSystem tileSystem = MapView.getTileSystem(); // used only for the default bounding box
     protected BoundingBox mBounds = new BoundingBox(tileSystem.getMaxLatitude(), tileSystem.getMaxLongitude(), tileSystem.getMinLatitude(), tileSystem.getMinLongitude());
 
@@ -101,6 +102,34 @@ public abstract class Overlay implements OverlayConstants {
      */
     public boolean isEnabled() {
         return this.mEnabled;
+    }
+
+    /**
+     * Sets whether the Overlay should respond to touch events.
+     * When set to false, the overlay will be skipped during touch event processing,
+     * improving performance for visual-only overlays (e.g., decoration markers).
+     * The overlay will still be drawn normally.
+     * 
+     * <p>This is particularly useful for overlays that are placed in interactive layers
+     * for z-order control but don't need to handle user interaction.</p>
+     * 
+     * @param interactive true if the overlay should handle touch events (default), 
+     *                    false to skip touch event processing
+     * @since 6.3.0
+     */
+    public void setInteractive(final boolean interactive) {
+        this.mInteractive = interactive;
+    }
+
+    /**
+     * Checks if the Overlay is marked to respond to touch events.
+     * Non-interactive overlays are skipped during touch event processing.
+     * 
+     * @return true if the Overlay should handle touch events, false otherwise
+     * @since 6.3.0
+     */
+    public boolean isInteractive() {
+        return this.mInteractive;
     }
 
     /**
