@@ -38,6 +38,7 @@ import org.osmdroid.util.constants.GeoConstants;
 import org.osmdroid.views.MapView;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -50,6 +51,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import android.os.Build;
 import android.util.ArraySet;
@@ -86,15 +88,25 @@ public class CacheManager {
     protected Set<CacheManagerTask> mPendingTasks = new CopyOnWriteArraySet<>();
     protected boolean verifyCancel = true;
 
-    // API 23+ optimization: Use work-stealing pool for better multi-core utilization
-    private final ExecutorService mExecutorService = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ?
-            ForkJoinPool.commonPool() : 
-            Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors()));
+    // API 23+ optimization: Use ThreadPoolManager for optimized thread pool management
+    private final ThreadPoolManager mThreadPoolManager;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     
-    // API 23+ optimization: Cache expensive mathematical calculations
-    private static final LruCache<String, Double> sGroundResolutionCache = new LruCache<>(1000);
-    private static final LruCache<String, Point> sTileCache = new LruCache<>(2000);
+    // API 23+ optimization: Cache expensive mathematical calculations using CalculationCache
+    private final CalculationCache mCalculationCache;
+    
+    // API 23+ optimization: Use TaskCoordinator for enhanced task management
+    private final TaskCoordinator mTaskCoordinator;
+    
+    // API 23+ optimization: Use ErrorRecoveryHandler for intelligent retry and error handling
+    private final ErrorRecoveryHandler mErrorRecoveryHandler;
+    
+    // API 23+ optimization: Use BulkOperationOptimizer for batched tile processing
+    private final BulkOperationOptimizer mBulkOperationOptimizer;
+    
+    // Metrics and diagnostics for monitoring and troubleshooting
+    private final CacheManagerMetrics mMetrics;
+    private final CacheManagerDiagnostics mDiagnostics;
 
     public CacheManager(final MapView mapView) throws TileSourcePolicyException {
         this(mapView, mapView.getTileProvider().getTileWriter());
@@ -123,10 +135,191 @@ public class CacheManager {
                         final IFilesystemCache pWriter,
                         final int pMinZoomLevel, final int pMaxZoomLevel)
             throws TileSourcePolicyException {
+        this(pTileSource, pWriter, pMinZoomLevel, pMaxZoomLevel, new CalculationCache());
+    }
+    
+    /**
+     * Constructor with custom CalculationCache for advanced configuration.
+     * 
+     * @param pTileSource Tile source
+     * @param pWriter Filesystem cache writer
+     * @param pMinZoomLevel Minimum zoom level
+     * @param pMaxZoomLevel Maximum zoom level
+     * @param calculationCache Custom calculation cache instance
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @since 6.2.0
+     */
+    public CacheManager(final ITileSource pTileSource,
+                        final IFilesystemCache pWriter,
+                        final int pMinZoomLevel, final int pMaxZoomLevel,
+                        final CalculationCache calculationCache)
+            throws TileSourcePolicyException {
+        this(pTileSource, pWriter, pMinZoomLevel, pMaxZoomLevel, calculationCache, new ThreadPoolManager());
+    }
+    
+    /**
+     * Constructor with custom CalculationCache and ThreadPoolManager for advanced configuration.
+     * 
+     * @param pTileSource Tile source
+     * @param pWriter Filesystem cache writer
+     * @param pMinZoomLevel Minimum zoom level
+     * @param pMaxZoomLevel Maximum zoom level
+     * @param calculationCache Custom calculation cache instance
+     * @param threadPoolManager Custom thread pool manager instance
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @since 6.2.0
+     */
+    public CacheManager(final ITileSource pTileSource,
+                        final IFilesystemCache pWriter,
+                        final int pMinZoomLevel, final int pMaxZoomLevel,
+                        final CalculationCache calculationCache,
+                        final ThreadPoolManager threadPoolManager)
+            throws TileSourcePolicyException {
+        this(pTileSource, pWriter, pMinZoomLevel, pMaxZoomLevel, calculationCache, 
+             threadPoolManager, new ErrorRecoveryHandler());
+    }
+    
+    /**
+     * Constructor with full customization including error recovery handler.
+     * 
+     * @param pTileSource Tile source
+     * @param pWriter Filesystem cache writer
+     * @param pMinZoomLevel Minimum zoom level
+     * @param pMaxZoomLevel Maximum zoom level
+     * @param calculationCache Custom calculation cache instance
+     * @param threadPoolManager Custom thread pool manager instance
+     * @param errorRecoveryHandler Custom error recovery handler instance
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @since 6.2.0
+     */
+    public CacheManager(final ITileSource pTileSource,
+                        final IFilesystemCache pWriter,
+                        final int pMinZoomLevel, final int pMaxZoomLevel,
+                        final CalculationCache calculationCache,
+                        final ThreadPoolManager threadPoolManager,
+                        final ErrorRecoveryHandler errorRecoveryHandler)
+            throws TileSourcePolicyException {
         mTileSource = pTileSource;
         mTileWriter = pWriter;
         mMinZoomLevel = pMinZoomLevel;
         mMaxZoomLevel = pMaxZoomLevel;
+        mCalculationCache = calculationCache;
+        mThreadPoolManager = threadPoolManager;
+        mTaskCoordinator = new TaskCoordinator();
+        mErrorRecoveryHandler = errorRecoveryHandler;
+        mBulkOperationOptimizer = new BulkOperationOptimizer(threadPoolManager);
+        mMetrics = new CacheManagerMetrics();
+        mDiagnostics = new CacheManagerDiagnostics(this, mMetrics);
+        
+        // Wire up calculation cache metrics
+        mCalculationCache.setMetricsListener(new CalculationCache.CacheMetricsListener() {
+            @Override
+            public void onCacheHit() {
+                mMetrics.recordCacheHit();
+            }
+            
+            @Override
+            public void onCacheMiss() {
+                mMetrics.recordCacheMiss();
+            }
+            
+            @Override
+            public void onCacheEviction() {
+                mMetrics.recordCacheEviction();
+            }
+        });
+    }
+    
+    /**
+     * Constructor with CacheManagerConfig for centralized configuration.
+     * This is the recommended constructor for new code as it provides a clean
+     * configuration interface and validates all settings.
+     * 
+     * @param pTileSource Tile source
+     * @param pWriter Filesystem cache writer
+     * @param pMinZoomLevel Minimum zoom level
+     * @param pMaxZoomLevel Maximum zoom level
+     * @param config Complete CacheManager configuration
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @throws IllegalArgumentException if configuration is invalid
+     * @since 6.2.0
+     */
+    public CacheManager(final ITileSource pTileSource,
+                        final IFilesystemCache pWriter,
+                        final int pMinZoomLevel, final int pMaxZoomLevel,
+                        final CacheManagerConfig config)
+            throws TileSourcePolicyException {
+        // Validate configuration
+        ConfigurationManager configManager = new ConfigurationManager(config);
+        configManager.validate();
+        
+        // Initialize with validated configuration
+        mTileSource = pTileSource;
+        mTileWriter = pWriter;
+        mMinZoomLevel = pMinZoomLevel;
+        mMaxZoomLevel = pMaxZoomLevel;
+        
+        // Create components from configuration
+        mCalculationCache = new CalculationCache(config.getCacheConfig());
+        mThreadPoolManager = new ThreadPoolManager(config.getThreadPoolConfig());
+        mTaskCoordinator = new TaskCoordinator();
+        mErrorRecoveryHandler = new ErrorRecoveryHandler(config.getRetryConfig());
+        mBulkOperationOptimizer = new BulkOperationOptimizer(mThreadPoolManager);
+        mMetrics = new CacheManagerMetrics();
+        mDiagnostics = new CacheManagerDiagnostics(this, mMetrics);
+        
+        // Wire up calculation cache metrics
+        mCalculationCache.setMetricsListener(new CalculationCache.CacheMetricsListener() {
+            @Override
+            public void onCacheHit() {
+                mMetrics.recordCacheHit();
+            }
+            
+            @Override
+            public void onCacheMiss() {
+                mMetrics.recordCacheMiss();
+            }
+            
+            @Override
+            public void onCacheEviction() {
+                mMetrics.recordCacheEviction();
+            }
+        });
+    }
+    
+    /**
+     * Constructor with CacheManagerConfig for MapView integration.
+     * 
+     * @param mapView MapView instance
+     * @param config Complete CacheManager configuration
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @throws IllegalArgumentException if configuration is invalid
+     * @since 6.2.0
+     */
+    public CacheManager(final MapView mapView, final CacheManagerConfig config)
+            throws TileSourcePolicyException {
+        this(mapView.getTileProvider().getTileSource(),
+             mapView.getTileProvider().getTileWriter(),
+             (int) mapView.getMinZoomLevel(),
+             (int) mapView.getMaxZoomLevel(),
+             config);
+    }
+    
+    /**
+     * Constructor with CacheManagerConfig for MapTileProviderBase integration.
+     * 
+     * @param pTileProvider Tile provider
+     * @param config Complete CacheManager configuration
+     * @throws TileSourcePolicyException if tile source policy is violated
+     * @throws IllegalArgumentException if configuration is invalid
+     * @since 6.2.0
+     */
+    public CacheManager(final MapTileProviderBase pTileProvider,
+                        final IFilesystemCache pWriter,
+                        final int pMinZoomLevel, final int pMaxZoomLevel,
+                        final CacheManagerConfig config)
+            throws TileSourcePolicyException {
+        this(pTileProvider.getTileSource(), pWriter, pMinZoomLevel, pMaxZoomLevel, config);
     }
 
     /**
@@ -138,34 +331,161 @@ public class CacheManager {
     }
     
     /**
-     * API 23+ optimization: Cache expensive ground resolution calculations
-     * @since API 23+ optimization
+     * Gets the CalculationCache instance for this CacheManager.
+     * 
+     * @return The calculation cache instance
+     * @since 6.2.0
      */
-    private static double getCachedGroundResolution(double latitude, int zoomLevel) {
-        String key = latitude + "_" + zoomLevel;
-        Double cached = sGroundResolutionCache.get(key);
-        if (cached == null) {
-            cached = TileSystem.GroundResolution(latitude, zoomLevel);
-            sGroundResolutionCache.put(key, cached);
-        }
-        return cached;
+    public CalculationCache getCalculationCache() {
+        return mCalculationCache;
     }
     
     /**
-     * API 23+ optimization: Cache tile coordinate calculations
-     * @since API 23+ optimization
+     * Gets the ThreadPoolManager instance for this CacheManager.
+     * 
+     * @return The thread pool manager instance
+     * @since 6.2.0
      */
-    private static Point getCachedTilePoint(double longitude, double latitude, int zoomLevel) {
-        String key = longitude + "_" + latitude + "_" + zoomLevel;
-        Point cached = sTileCache.get(key);
-        if (cached == null) {
-            cached = new Point(
-                MapView.getTileSystem().getTileXFromLongitude(longitude, zoomLevel),
-                MapView.getTileSystem().getTileYFromLatitude(latitude, zoomLevel)
-            );
-            sTileCache.put(key, cached);
-        }
-        return cached;
+    public ThreadPoolManager getThreadPoolManager() {
+        return mThreadPoolManager;
+    }
+    
+    /**
+     * Gets the TaskCoordinator instance for this CacheManager.
+     * 
+     * @return The task coordinator instance
+     * @since 6.2.0
+     */
+    public TaskCoordinator getTaskCoordinator() {
+        return mTaskCoordinator;
+    }
+    
+    /**
+     * Gets comprehensive statistics about task execution.
+     * 
+     * @return TaskStatistics object containing execution metrics
+     * @since 6.2.0
+     */
+    public TaskCoordinator.TaskStatistics getTaskStatistics() {
+        return mTaskCoordinator.getStatistics();
+    }
+    
+    /**
+     * Gets the ErrorRecoveryHandler instance for this CacheManager.
+     * 
+     * @return The error recovery handler instance
+     * @since 6.2.0
+     */
+    public ErrorRecoveryHandler getErrorRecoveryHandler() {
+        return mErrorRecoveryHandler;
+    }
+    
+    /**
+     * Gets error statistics from the error recovery handler.
+     * 
+     * @return ErrorStatistics object containing error metrics
+     * @since 6.2.0
+     */
+    public ErrorRecoveryHandler.ErrorStatistics getErrorStatistics() {
+        return mErrorRecoveryHandler.getStatistics();
+    }
+    
+    /**
+     * Gets the BulkOperationOptimizer instance for this CacheManager.
+     * 
+     * @return The bulk operation optimizer instance
+     * @since 6.2.0
+     */
+    public BulkOperationOptimizer getBulkOperationOptimizer() {
+        return mBulkOperationOptimizer;
+    }
+    
+    /**
+     * Gets the CacheManagerMetrics instance for monitoring performance.
+     * 
+     * @return The metrics collector instance
+     * @since 6.2.0
+     */
+    public CacheManagerMetrics getMetrics() {
+        return mMetrics;
+    }
+    
+    /**
+     * Gets a snapshot of current metrics.
+     * 
+     * @return MetricsSnapshot containing current metrics
+     * @since 6.2.0
+     */
+    public CacheManagerMetrics.MetricsSnapshot getMetricsSnapshot() {
+        return mMetrics.getSnapshot();
+    }
+    
+    /**
+     * Gets the CacheManagerDiagnostics instance for troubleshooting.
+     * 
+     * @return The diagnostics utility instance
+     * @since 6.2.0
+     */
+    public CacheManagerDiagnostics getDiagnostics() {
+        return mDiagnostics;
+    }
+    
+    /**
+     * Generates and returns a comprehensive diagnostic report.
+     * 
+     * @return Diagnostic report as a string
+     * @since 6.2.0
+     */
+    public String generateDiagnosticReport() {
+        return mDiagnostics.generateReport();
+    }
+    
+    /**
+     * Logs a summary of current metrics to the Android log.
+     * 
+     * @since 6.2.0
+     */
+    public void logMetricsSummary() {
+        mMetrics.logSummary();
+    }
+    
+    /**
+     * Logs a comprehensive diagnostic report to the Android log.
+     * 
+     * @since 6.2.0
+     */
+    public void logDiagnosticReport() {
+        mDiagnostics.logReport();
+    }
+    
+    /**
+     * Resets all metrics to zero.
+     * Useful for benchmarking specific operations.
+     * 
+     * @since 6.2.0
+     */
+    public void resetMetrics() {
+        mMetrics.reset();
+    }
+    
+    /**
+     * Checks if the CacheManager is operating healthily.
+     * 
+     * @return true if no issues detected, false otherwise
+     * @since 6.2.0
+     */
+    public boolean isHealthy() {
+        return mDiagnostics.isHealthy();
+    }
+    
+    /**
+     * Checks for common issues and returns a list of problems found.
+     * 
+     * @return List of issue descriptions
+     * @since 6.2.0
+     */
+    public List<String> checkForIssues() {
+        return mDiagnostics.checkForIssues();
     }
 
     /**
@@ -220,20 +540,153 @@ public class CacheManager {
      * @since 5.6.5
      */
     public boolean forceLoadTile(final OnlineTileSourceBase tileSource, final long pMapTileIndex) {
-        try {
-            final Drawable drawable = mTileDownloader.downloadTile(pMapTileIndex, mTileWriter, tileSource);
-            return drawable != null;
-        } catch (CantContinueException e) {
-            return false;
-        }
+        return forceLoadTileWithRetry(tileSource, pMapTileIndex, true);
+    }
+    
+    /**
+     * Internal method for tile download with retry support.
+     * 
+     * @param tileSource The tile source
+     * @param pMapTileIndex The tile index
+     * @param enableRetry Whether to enable retry logic
+     * @return true if success, false if error
+     * @since 6.2.0
+     */
+    private boolean forceLoadTileWithRetry(final OnlineTileSourceBase tileSource, 
+                                           final long pMapTileIndex, 
+                                           final boolean enableRetry) {
+        Exception lastException = null;
+        int attemptNumber = 0;
+        
+        do {
+            attemptNumber++;
+            
+            try {
+                long downloadStart = System.currentTimeMillis();
+                final Drawable drawable = mTileDownloader.downloadTile(pMapTileIndex, mTileWriter, tileSource);
+                long downloadDuration = System.currentTimeMillis() - downloadStart;
+                boolean success = drawable != null;
+                
+                // Record metrics
+                int zoomLevel = org.osmdroid.util.MapTileIndex.getZoom(pMapTileIndex);
+                mMetrics.recordTileDownload(zoomLevel, downloadDuration, success);
+                
+                if (success && attemptNumber > 1) {
+                    // Mark as recovered if we succeeded after retry
+                    mErrorRecoveryHandler.markRecovered(pMapTileIndex);
+                    mMetrics.recordRetrySuccess();
+                }
+                
+                return success;
+                
+            } catch (CantContinueException e) {
+                lastException = e;
+                mMetrics.recordNetworkError();
+                
+                if (!enableRetry) {
+                    // Retry disabled, fail immediately
+                    mErrorRecoveryHandler.handleTileDownloadError(pMapTileIndex, e);
+                    return false;
+                }
+                
+                // Check if we should retry
+                boolean shouldRetry = mErrorRecoveryHandler.handleTileDownloadError(pMapTileIndex, e);
+                
+                if (shouldRetry) {
+                    // Calculate delay and wait before retry
+                    long delay = mErrorRecoveryHandler.getRetryDelay(pMapTileIndex);
+                    if (delay > 0) {
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException ie) {
+                            // Thread interrupted, stop retrying
+                            Thread.currentThread().interrupt();
+                            return false;
+                        }
+                    }
+                } else {
+                    // No more retries
+                    return false;
+                }
+                
+            } catch (Exception e) {
+                // Handle unexpected exceptions
+                lastException = e;
+                
+                if (!enableRetry) {
+                    mErrorRecoveryHandler.handleTileDownloadError(pMapTileIndex, e);
+                    return false;
+                }
+                
+                boolean shouldRetry = mErrorRecoveryHandler.handleTileDownloadError(pMapTileIndex, e);
+                
+                if (shouldRetry) {
+                    long delay = mErrorRecoveryHandler.getRetryDelay(pMapTileIndex);
+                    if (delay > 0) {
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return false;
+                        }
+                    }
+                } else {
+                    return false;
+                }
+            }
+            
+        } while (attemptNumber <= mErrorRecoveryHandler.getRetryPolicy().getMaxRetries());
+        
+        // All retries exhausted
+        return false;
     }
 
     /** Returns <i>TRUE</i> if deletion was not possible */
     private boolean deleteTileError(final long pMapTileIndex) {
-        return this.checkTile(pMapTileIndex) && !mTileWriter.remove(mTileSource, pMapTileIndex);
+        boolean tileExists = this.checkTile(pMapTileIndex);
+        if (tileExists) {
+            try {
+                boolean removed = mTileWriter.remove(mTileSource, pMapTileIndex);
+                if (!removed) {
+                    // Log deletion failure
+                    mErrorRecoveryHandler.handleCacheWriteError(pMapTileIndex, 
+                        new IOException("Failed to delete tile " + pMapTileIndex));
+                }
+                return !removed;
+            } catch (Exception e) {
+                mErrorRecoveryHandler.handleCacheWriteError(pMapTileIndex, e);
+                return true; // Deletion failed
+            }
+        }
+        return false;
     }
+    
     public boolean deleteTile(final long pMapTileIndex) {
-        return !this.checkTile(pMapTileIndex) || mTileWriter.remove(mTileSource, pMapTileIndex);
+        if (!this.checkTile(pMapTileIndex)) {
+            return true; // Tile doesn't exist, consider it deleted
+        }
+        
+        try {
+            boolean removed = mTileWriter.remove(mTileSource, pMapTileIndex);
+            
+            // Record metrics
+            int zoomLevel = org.osmdroid.util.MapTileIndex.getZoom(pMapTileIndex);
+            mMetrics.recordTileDeletion(zoomLevel, removed);
+            
+            if (!removed) {
+                // Log deletion failure
+                mErrorRecoveryHandler.handleCacheWriteError(pMapTileIndex, 
+                    new IOException("Failed to delete tile " + pMapTileIndex));
+                mMetrics.recordIOError();
+            }
+            return removed;
+        } catch (Exception e) {
+            int zoomLevel = org.osmdroid.util.MapTileIndex.getZoom(pMapTileIndex);
+            mMetrics.recordTileDeletion(zoomLevel, false);
+            mMetrics.recordIOError();
+            mErrorRecoveryHandler.handleCacheWriteError(pMapTileIndex, e);
+            return false;
+        }
     }
 
     public boolean checkTile(final long pMapTileIndex) {
@@ -261,11 +714,70 @@ public class CacheManager {
      */
     public static List<Long> getTilesCoverage(final BoundingBox pBB,
                                               final int pZoomMin, final int pZoomMax) {
-        final List<Long> result = new ArrayList<>();
+        return getTilesCoverageOptimized(pBB, pZoomMin, pZoomMax, null, false);
+    }
+    
+    /**
+     * Computes the theoretical tiles covered by the bounding box with optional parallel processing.
+     * 
+     * @param pBB Bounding box
+     * @param pZoomMin Minimum zoom level
+     * @param pZoomMax Maximum zoom level
+     * @param threadPoolManager Optional thread pool manager for parallel processing (can be null)
+     * @param enableParallel Whether to enable parallel processing
+     * @return list of tiles, sorted by ascending zoom level
+     * @since 6.2.0
+     */
+    public static List<Long> getTilesCoverageOptimized(final BoundingBox pBB,
+                                                       final int pZoomMin, final int pZoomMax,
+                                                       final ThreadPoolManager threadPoolManager,
+                                                       final boolean enableParallel) {
+        // Pre-calculate expected size for better memory efficiency
+        int expectedSize = 0;
         for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
-            final Collection<Long> resultForZoom = getTilesCoverage(pBB, zoomLevel);
-            result.addAll(resultForZoom);
+            final Rect rect = getTilesRect(pBB, zoomLevel);
+            expectedSize += (rect.width() + 1) * (rect.height() + 1);
         }
+        
+        final List<Long> result = CollectionFactory.createOptimalList(expectedSize);
+        
+        // Check if parallel processing is beneficial
+        int zoomLevels = pZoomMax - pZoomMin + 1;
+        boolean useParallel = enableParallel && threadPoolManager != null && 
+                             zoomLevels >= 3 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N;
+        
+        if (useParallel) {
+            // Process zoom levels in parallel
+            List<java.util.concurrent.Future<Collection<Long>>> futures = new ArrayList<>(zoomLevels);
+            ExecutorService executor = threadPoolManager.getBulkOperationExecutor();
+            
+            for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
+                final int finalZoomLevel = zoomLevel;
+                futures.add(executor.submit(new java.util.concurrent.Callable<Collection<Long>>() {
+                    @Override
+                    public Collection<Long> call() {
+                        return getTilesCoverage(pBB, finalZoomLevel);
+                    }
+                }));
+            }
+            
+            // Collect results in order
+            for (java.util.concurrent.Future<Collection<Long>> future : futures) {
+                try {
+                    result.addAll(future.get());
+                } catch (Exception e) {
+                    // Fall back to sequential processing for this zoom level
+                    // Log.e(IMapView.LOGTAG, "Error in parallel tile coverage calculation", e);
+                }
+            }
+        } else {
+            // Sequential processing
+            for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
+                final Collection<Long> resultForZoom = getTilesCoverage(pBB, zoomLevel);
+                result.addAll(resultForZoom);
+            }
+        }
+        
         return result;
     }
 
@@ -275,9 +787,12 @@ public class CacheManager {
      * @return list of tiles for that zoom level, without any specific order
      */
     public static Collection<Long> getTilesCoverage(final BoundingBox pBB, final int pZoomLevel) {
-        // API 23+ optimization: Use ArraySet for better performance with small to medium collections
-        final Set<Long> result = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
-                new ArraySet<>() : new LinkedHashSet<>();
+        // Calculate expected size for optimal collection pre-sizing
+        final Rect rect = getTilesRect(pBB, pZoomLevel);
+        final int expectedSize = (rect.width() + 1) * (rect.height() + 1);
+        
+        // API 23+ optimization: Use CollectionFactory for optimal set implementation
+        final Set<Long> result = CollectionFactory.createOptimalSet(expectedSize);
         
         for (Long mapTile : getTilesCoverageIterable(pBB, pZoomLevel, pZoomLevel)) {
             result.add(mapTile);
@@ -295,9 +810,25 @@ public class CacheManager {
      */
     static IterableWithSize<Long> getTilesCoverageIterable(final BoundingBox pBB,
                                                            final int pZoomMin, final int pZoomMax) {
+        return getTilesCoverageIterable(pBB, pZoomMin, pZoomMax, null);
+    }
+    
+    /**
+     * Iterable returning tiles covered by the bounding box sorted by ascending zoom level with caching support.
+     *
+     * @param pBB      the given bounding box
+     * @param pZoomMin the given minimum zoom level
+     * @param pZoomMax the given maximum zoom level
+     * @param calculationCache Optional calculation cache for performance (can be null)
+     * @return the iterable described above
+     * @since 6.2.0
+     */
+    static IterableWithSize<Long> getTilesCoverageIterable(final BoundingBox pBB,
+                                                           final int pZoomMin, final int pZoomMax,
+                                                           final CalculationCache calculationCache) {
         final MapTileAreaList list = new MapTileAreaList();
         for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
-            list.getList().add(new MapTileArea().set(zoomLevel, getTilesRect(pBB, zoomLevel)));
+            list.getList().add(new MapTileArea().set(zoomLevel, getTilesRect(pBB, zoomLevel, calculationCache)));
         }
         return list;
     }
@@ -312,11 +843,43 @@ public class CacheManager {
      */
     public static Rect getTilesRect(final BoundingBox pBB,
                                     final int pZoomLevel) {
+        return getTilesRect(pBB, pZoomLevel, null);
+    }
+    
+    /**
+     * Retrieve upper left and lower right points(exclusive) corresponding to the tiles coverage for
+     * the selected zoom level with caching support.
+     *
+     * @param pBB        the given bounding box
+     * @param pZoomLevel the given zoom level
+     * @param calculationCache Optional calculation cache for performance (can be null)
+     * @return the {@link Rect} reflecting the tiles coverage
+     * @since 6.2.0
+     */
+    public static Rect getTilesRect(final BoundingBox pBB,
+                                    final int pZoomLevel,
+                                    final CalculationCache calculationCache) {
         final int mapTileUpperBound = 1 << pZoomLevel;
-        final int right = MapView.getTileSystem().getTileXFromLongitude(pBB.getLonEast(), pZoomLevel);
-        final int bottom = MapView.getTileSystem().getTileYFromLatitude(pBB.getLatSouth(), pZoomLevel);
-        final int left = MapView.getTileSystem().getTileXFromLongitude(pBB.getLonWest(), pZoomLevel);
-        final int top = MapView.getTileSystem().getTileYFromLatitude(pBB.getLatNorth(), pZoomLevel);
+        final TileSystem tileSystem = MapView.getTileSystem();
+        
+        // Use cached tile coordinate calculations if cache is available
+        final int right, bottom, left, top;
+        if (calculationCache != null) {
+            Point rightBottom = calculationCache.getCachedTileCoordinates(tileSystem, 
+                    pBB.getLonEast(), pBB.getLatSouth(), pZoomLevel);
+            Point leftTop = calculationCache.getCachedTileCoordinates(tileSystem,
+                    pBB.getLonWest(), pBB.getLatNorth(), pZoomLevel);
+            right = rightBottom.x;
+            bottom = rightBottom.y;
+            left = leftTop.x;
+            top = leftTop.y;
+        } else {
+            right = tileSystem.getTileXFromLongitude(pBB.getLonEast(), pZoomLevel);
+            bottom = tileSystem.getTileYFromLatitude(pBB.getLatSouth(), pZoomLevel);
+            left = tileSystem.getTileXFromLongitude(pBB.getLonWest(), pZoomLevel);
+            top = tileSystem.getTileYFromLatitude(pBB.getLatNorth(), pZoomLevel);
+        }
+        
         int width = right - left + 1; // handling the modulo
         if (width <= 0) {
             width += mapTileUpperBound;
@@ -335,9 +898,28 @@ public class CacheManager {
      */
     public static List<Long> getTilesCoverage(final ArrayList<GeoPoint> pGeoPoints,
                                               final int pZoomMin, final int pZoomMax) {
-        final List<Long> result = new ArrayList<>();
+        return getTilesCoverage(pGeoPoints, pZoomMin, pZoomMax, null);
+    }
+    
+    /**
+     * Computes the theoretical tiles covered by the list of points with caching support.
+     *
+     * @param pGeoPoints List of geographic points
+     * @param pZoomMin Minimum zoom level
+     * @param pZoomMax Maximum zoom level
+     * @param calculationCache Optional calculation cache for performance (can be null)
+     * @return list of tiles, sorted by ascending zoom level
+     * @since 6.2.0
+     */
+    public static List<Long> getTilesCoverage(final ArrayList<GeoPoint> pGeoPoints,
+                                              final int pZoomMin, final int pZoomMax,
+                                              final CalculationCache calculationCache) {
+        // Estimate size based on points and zoom levels for better memory efficiency
+        final int estimatedSize = pGeoPoints.size() * (pZoomMax - pZoomMin + 1) * 4;
+        final List<Long> result = CollectionFactory.createOptimalList(estimatedSize);
+        
         for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
-            final Collection<Long> resultForZoom = getTilesCoverage(pGeoPoints, zoomLevel);
+            final Collection<Long> resultForZoom = getTilesCoverage(pGeoPoints, zoomLevel, calculationCache);
             result.addAll(resultForZoom);
         }
         return result;
@@ -349,11 +931,27 @@ public class CacheManager {
      */
     public static Collection<Long> getTilesCoverage(final ArrayList<GeoPoint> pGeoPoints,
                                                     final int pZoomLevel) {
-        // API 23+ optimization: Use concurrent collections for thread safety and performance
-        final Set<Long> result = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ?
-                ConcurrentHashMap.newKeySet() : 
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
-                new ArraySet<>() : new HashSet<>();
+        return getTilesCoverage(pGeoPoints, pZoomLevel, null);
+    }
+    
+    /**
+     * Computes the theoretical tiles covered by the list of points with caching support.
+     * Calculation done based on http://www.movable-type.co.uk/scripts/latlong.html
+     * 
+     * @param pGeoPoints List of geographic points
+     * @param pZoomLevel Zoom level
+     * @param calculationCache Optional calculation cache for performance (can be null)
+     * @return Collection of tile indices
+     * @since 6.2.0
+     */
+    public static Collection<Long> getTilesCoverage(final ArrayList<GeoPoint> pGeoPoints,
+                                                    final int pZoomLevel,
+                                                    final CalculationCache calculationCache) {
+        // Estimate size: each point can generate ~4 tiles (2x2 area)
+        final int estimatedSize = pGeoPoints.size() * 4;
+        
+        // API 23+ optimization: Use CollectionFactory for optimal set implementation
+        final Set<Long> result = CollectionFactory.createOptimalSet(estimatedSize);
 
         GeoPoint prevPoint = null;
         Point tile, prevTile = null;
@@ -362,7 +960,9 @@ public class CacheManager {
         for (GeoPoint geoPoint : pGeoPoints) {
 
             // API 23+ optimization: Cache expensive ground resolution calculations
-            final double d = getCachedGroundResolution(geoPoint.getLatitude(), pZoomLevel);
+            final double d = calculationCache != null ?
+                    calculationCache.getCachedGroundResolution(geoPoint.getLatitude(), pZoomLevel) :
+                    TileSystem.GroundResolution(geoPoint.getLatitude(), pZoomLevel);
 
             if (result.size() != 0) {
 
@@ -401,7 +1001,7 @@ public class CacheManager {
                             // API 23+ optimization: Bulk operations for better performance
                             int ofsx = tile.x >= 0 ? 0 : -tile.x;
                             int ofsy = tile.y >= 0 ? 0 : -tile.y;
-                            List<Long> tilesToAdd = new ArrayList<>(4); // Pre-sized for typical 2x2 area
+                            List<Long> tilesToAdd = CollectionFactory.createOptimalList(4); // Pre-sized for typical 2x2 area
                             for (int xAround = tile.x + ofsx; xAround <= tile.x + 1 + ofsx; xAround++) {
                                 for (int yAround = tile.y + ofsy; yAround <= tile.y + 1 + ofsy; yAround++) {
                                     final int tileY = MyMath.mod(yAround, mapTileUpperBound);
@@ -425,7 +1025,7 @@ public class CacheManager {
                 // API 23+ optimization: Bulk operations for better performance
                 int ofsx = tile.x >= 0 ? 0 : -tile.x;
                 int ofsy = tile.y >= 0 ? 0 : -tile.y;
-                List<Long> tilesToAdd = new ArrayList<>(4); // Pre-sized for typical 2x2 area
+                List<Long> tilesToAdd = CollectionFactory.createOptimalList(4); // Pre-sized for typical 2x2 area
                 for (int xAround = tile.x + ofsx; xAround <= tile.x + 1 + ofsx; xAround++) {
                     for (int yAround = tile.y + ofsy; yAround <= tile.y + 1 + ofsy; yAround++) {
                         final int tileY = MyMath.mod(yAround, mapTileUpperBound);
@@ -445,7 +1045,7 @@ public class CacheManager {
      * @return the theoretical number of tiles in the specified area
      */
     public int possibleTilesInArea(final BoundingBox pBB, final int pZoomMin, final int pZoomMax) {
-        return getTilesCoverageIterable(pBB, pZoomMin, pZoomMax).size();
+        return getTilesCoverageIterable(pBB, pZoomMin, pZoomMax, mCalculationCache).size();
     }
 
     /**
@@ -454,13 +1054,26 @@ public class CacheManager {
      */
     public int possibleTilesCovered(final ArrayList<GeoPoint> pGeoPoints,
                                     final int pZoomMin, final int pZoomMax) {
-        return getTilesCoverage(pGeoPoints, pZoomMin, pZoomMax).size();
+        // Estimate size based on points and zoom levels for better memory efficiency
+        final int estimatedSize = pGeoPoints.size() * (pZoomMax - pZoomMin + 1) * 4;
+        final List<Long> result = CollectionFactory.createOptimalList(estimatedSize);
+        
+        for (int zoomLevel = pZoomMin; zoomLevel <= pZoomMax; zoomLevel++) {
+            final Collection<Long> resultForZoom = getTilesCoverage(pGeoPoints, zoomLevel, mCalculationCache);
+            result.addAll(resultForZoom);
+        }
+        return result.size();
     }
 
     public CacheManagerTask execute(final CacheManagerTask pTask) {
         pTask.onPreExecute();
         mPendingTasks.add(pTask);
-        mExecutorService.submit(pTask);
+        // Register task with TaskCoordinator for enhanced tracking
+        mTaskCoordinator.registerTask(pTask);
+        // Record task start in metrics
+        mMetrics.recordTaskStart(pTask.getTaskId());
+        // Use ThreadPoolManager for optimized execution
+        mThreadPoolManager.getPrimaryExecutor().submit(pTask);
         return pTask;
     }
 
@@ -584,14 +1197,20 @@ public class CacheManager {
     }
 
     /**
-     * cancels all tasks
+     * Cancels all tasks with proper thread interruption.
+     * Uses parallel cancellation on API 24+ for better performance.
      *
      * @since 5.6.3
      */
     public void cancelAllJobs() {
+        // Use TaskCoordinator for enhanced cancellation with statistics tracking
+        mTaskCoordinator.cancelAllTasks(true);
+        
+        // Also clear the legacy mPendingTasks for backward compatibility
         // API 23+ optimization: Use modern iteration patterns for better performance
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             // API 24+: Use parallel streams for faster cancellation of many tasks
+            // This leverages the ForkJoinPool for efficient parallel processing
             mPendingTasks.parallelStream().forEach(task -> task.cancel(true));
         } else {
             // API 23+: Use enhanced for-each (CopyOnWriteArraySet is safe for concurrent iteration)
@@ -600,6 +1219,28 @@ public class CacheManager {
             }
         }
         mPendingTasks.clear();
+    }
+    
+    /**
+     * Shuts down the thread pool manager gracefully.
+     * Should be called when the CacheManager is no longer needed.
+     * 
+     * @since 6.2.0
+     */
+    public void shutdown() {
+        cancelAllJobs();
+        mThreadPoolManager.shutdown();
+    }
+    
+    /**
+     * Shuts down the thread pool manager immediately.
+     * Attempts to stop all actively executing tasks.
+     * 
+     * @since 6.2.0
+     */
+    public void shutdownNow() {
+        cancelAllJobs();
+        mThreadPoolManager.shutdownNow();
     }
 
     /**
@@ -635,7 +1276,10 @@ public class CacheManager {
     }
 
     /**
-     *
+     * Callback interface for CacheManager task progress and completion notifications.
+     * Enhanced in 6.2.0 with detailed statistics support.
+     * 
+     * @since 5.6.3
      */
     public interface CacheManagerCallback {
 
@@ -672,6 +1316,45 @@ public class CacheManager {
          * @param errors
          */
         public void onTaskFailed(int errors);
+        
+        /**
+         * Enhanced progress update with detailed statistics.
+         * Default implementation delegates to the basic updateProgress method for backward compatibility.
+         * 
+         * @param statistics Detailed progress statistics
+         * @param zoomMin Minimum zoom level
+         * @param zoomMax Maximum zoom level
+         * @since 6.2.0
+         */
+        default void updateProgressWithStatistics(ProgressReporter.ProgressStatistics statistics, 
+                                                 int zoomMin, int zoomMax) {
+            // Default implementation for backward compatibility
+            updateProgress(statistics.currentProgress, statistics.currentZoomLevel, zoomMin, zoomMax);
+        }
+        
+        /**
+         * Called when the task completes with detailed statistics.
+         * Default implementation delegates to onTaskComplete for backward compatibility.
+         * 
+         * @param statistics Final task statistics
+         * @since 6.2.0
+         */
+        default void onTaskCompleteWithStatistics(ProgressReporter.ProgressStatistics statistics) {
+            // Default implementation for backward compatibility
+            onTaskComplete();
+        }
+        
+        /**
+         * Called when the task fails with detailed error information.
+         * Default implementation delegates to onTaskFailed for backward compatibility.
+         * 
+         * @param statistics Final task statistics including error counts
+         * @since 6.2.0
+         */
+        default void onTaskFailedWithStatistics(ProgressReporter.ProgressStatistics statistics) {
+            // Default implementation for backward compatibility
+            onTaskFailed(statistics.errorCount);
+        }
     }
 
     public static abstract class CacheManagerDialog implements CacheManagerCallback {
@@ -680,10 +1363,25 @@ public class CacheManager {
         private final AlertDialog mAlertDialog;
         private final ProgressBar mProgressBar;
         private final TextView mMessageView;
+        private final TextView mStatsView;
         private String handleMessage;
+        private boolean showDetailedStats = false;
 
         public CacheManagerDialog(final Context pCtx, final CacheManagerTask pTask) {
+            this(pCtx, pTask, false);
+        }
+        
+        /**
+         * Constructor with option to show detailed statistics.
+         * 
+         * @param pCtx Context
+         * @param pTask CacheManagerTask
+         * @param showDetailedStats Whether to show detailed statistics (success/error counts, ETA)
+         * @since 6.2.0
+         */
+        public CacheManagerDialog(final Context pCtx, final CacheManagerTask pTask, boolean showDetailedStats) {
             mTask = pTask;
+            this.showDetailedStats = showDetailedStats;
             handleMessage = pCtx.getString(R.string.cacheManagerHandlingMessage);
 
             LinearLayout layout = new LinearLayout(pCtx);
@@ -696,6 +1394,16 @@ public class CacheManager {
 
             layout.addView(mProgressBar);
             layout.addView(mMessageView);
+            
+            // Add statistics view if detailed stats are enabled
+            if (showDetailedStats) {
+                mStatsView = new TextView(pCtx);
+                mStatsView.setPadding(0, 5, 0, 0);
+                mStatsView.setTextSize(12);
+                layout.addView(mStatsView);
+            } else {
+                mStatsView = null;
+            }
 
             AlertDialog.Builder builder = new AlertDialog.Builder(pCtx);
             builder.setTitle(getUITitle());
@@ -739,6 +1447,35 @@ public class CacheManager {
         protected String zoomMessage(int zoomLevel, int zoomMin, int zoomMax) {
             return String.format(handleMessage, zoomLevel, zoomMin, zoomMax);
         }
+        
+        /**
+         * Formats detailed statistics message for display.
+         * 
+         * @param statistics Progress statistics
+         * @return Formatted statistics string
+         * @since 6.2.0
+         */
+        protected String formatStatistics(ProgressReporter.ProgressStatistics statistics) {
+            StringBuilder sb = new StringBuilder();
+            
+            // Success/Error counts
+            sb.append("Success: ").append(statistics.successCount);
+            sb.append(" | Errors: ").append(statistics.errorCount);
+            
+            // ETA if available
+            if (statistics.estimatedTimeRemainingMs > 0) {
+                long seconds = statistics.estimatedTimeRemainingMs / 1000;
+                if (seconds < 60) {
+                    sb.append(" | ETA: ").append(seconds).append("s");
+                } else {
+                    long minutes = seconds / 60;
+                    seconds = seconds % 60;
+                    sb.append(" | ETA: ").append(minutes).append("m ").append(seconds).append("s");
+                }
+            }
+            
+            return sb.toString();
+        }
 
         abstract protected String getUITitle();
 
@@ -746,6 +1483,18 @@ public class CacheManager {
         public void updateProgress(int progress, int currentZoomLevel, int zoomMin, int zoomMax) {
             mProgressBar.setProgress(progress);
             mMessageView.setText(zoomMessage(currentZoomLevel, zoomMin, zoomMax));
+        }
+        
+        @Override
+        public void updateProgressWithStatistics(ProgressReporter.ProgressStatistics statistics, 
+                                                int zoomMin, int zoomMax) {
+            mProgressBar.setProgress(statistics.currentProgress);
+            mMessageView.setText(zoomMessage(statistics.currentZoomLevel, zoomMin, zoomMax));
+            
+            // Update statistics view if enabled
+            if (showDetailedStats && mStatsView != null) {
+                mStatsView.setText(formatStatistics(statistics));
+            }
         }
 
         @Override
@@ -767,6 +1516,18 @@ public class CacheManager {
         public void onTaskFailed(int errors) {
             dismiss();
         }
+        
+        @Override
+        public void onTaskCompleteWithStatistics(ProgressReporter.ProgressStatistics statistics) {
+            // Subclasses can override to show final statistics before dismissing
+            onTaskComplete();
+        }
+        
+        @Override
+        public void onTaskFailedWithStatistics(ProgressReporter.ProgressStatistics statistics) {
+            // Subclasses can override to show detailed error information
+            onTaskFailed(statistics.errorCount);
+        }
 
         private void dismiss() {
             if (mAlertDialog.isShowing()) {
@@ -783,6 +1544,9 @@ public class CacheManager {
      * - and with callbacks for task progression
      */
     public static class CacheManagerTask implements Runnable {
+        private static final AtomicInteger sTaskIdGenerator = new AtomicInteger(0);
+        
+        private final long mTaskId;
         private final CacheManager mManager;
         private final CacheManagerAction mAction;
         private final IterableWithSize<Long> mTiles;
@@ -790,15 +1554,21 @@ public class CacheManager {
         private final int mZoomMax;
         private final ArrayList<CacheManagerCallback> mCallbacks = new ArrayList<>();
         private volatile boolean mCancelled = false;
+        private volatile Thread mExecutingThread;
+        private final ProgressReporter mProgressReporter;
+        private final long mTaskStartTime;
 
         private CacheManagerTask(final CacheManager pManager, final CacheManagerAction pAction,
                                  final IterableWithSize<Long> pTiles,
                                  final int pZoomMin, final int pZoomMax) {
+            mTaskId = sTaskIdGenerator.incrementAndGet();
+            mTaskStartTime = System.currentTimeMillis();
             mManager = pManager;
             mAction = pAction;
             mTiles = pTiles;
             mZoomMin = Math.max(pZoomMin, pManager.mMinZoomLevel);
             mZoomMax = Math.min(pZoomMax, pManager.mMaxZoomLevel);
+            mProgressReporter = new ProgressReporter();
         }
 
         public CacheManagerTask(final CacheManager pManager, final CacheManagerAction pAction,
@@ -824,9 +1594,43 @@ public class CacheManager {
                 mCallbacks.add(pCallback);
             }
         }
+        
+        /**
+         * Gets the unique task ID.
+         * 
+         * @return Task ID
+         * @since 6.2.0
+         */
+        public long getTaskId() {
+            return mTaskId;
+        }
+        
+        /**
+         * Gets the task start time.
+         * 
+         * @return Start time in milliseconds since epoch
+         * @since 6.2.0
+         */
+        public long getTaskStartTime() {
+            return mTaskStartTime;
+        }
+        
+        /**
+         * Gets the task duration so far.
+         * 
+         * @return Duration in milliseconds
+         * @since 6.2.0
+         */
+        public long getTaskDuration() {
+            return System.currentTimeMillis() - mTaskStartTime;
+        }
 
         public void onPreExecute() {
             final int total = mTiles.size();
+            
+            // Initialize progress reporter
+            mProgressReporter.initialize(total, mZoomMin, mZoomMax);
+            
             for (final CacheManagerCallback callback : mCallbacks) {
                 try {
                     callback.setPossibleTilesInArea(total);
@@ -844,9 +1648,14 @@ public class CacheManager {
 
         public void onProgressUpdate(final Integer... count) {
             //count[0] = tile counter, count[1] = current zoom level
+            
+            // Get statistics from progress reporter
+            ProgressReporter.ProgressStatistics statistics = mProgressReporter.getStatistics();
+            
             for (final CacheManagerCallback callback : mCallbacks) {
                 try {
-                    callback.updateProgress(count[0], count[1], mZoomMin, mZoomMax);
+                    // Try enhanced callback first, falls back to basic if not overridden
+                    callback.updateProgressWithStatistics(statistics, mZoomMin, mZoomMax);
                 } catch (Throwable t) {
                     logFaultyCallback(t);
                 }
@@ -855,16 +1664,37 @@ public class CacheManager {
 
         public void onCancelled() {
             mManager.mPendingTasks.remove(this);
+            // Record metrics
+            mManager.mMetrics.recordTaskCancelled(mTaskId);
+            // Notify TaskCoordinator about cancellation
+            mManager.mTaskCoordinator.markTaskCancelled(this);
         }
 
         public void onPostExecute(final Integer specialCount) {
             mManager.mPendingTasks.remove(this);
+            
+            // Mark progress reporter as complete
+            mProgressReporter.markComplete();
+            
+            // Get final statistics
+            ProgressReporter.ProgressStatistics finalStats = mProgressReporter.getStatistics();
+            
+            // Record metrics
+            int tilesProcessed = mTiles.size() - specialCount;
+            if (specialCount == 0) {
+                mManager.mMetrics.recordTaskComplete(mTaskId, tilesProcessed);
+                mManager.mTaskCoordinator.markTaskCompleted(this, mTiles.size());
+            } else {
+                mManager.mMetrics.recordTaskFailed(mTaskId, tilesProcessed);
+                mManager.mTaskCoordinator.markTaskFailed(this, mTiles.size() - specialCount);
+            }
+            
             for (final CacheManagerCallback callback : mCallbacks) {
                 try {
                     if (specialCount == 0) {
-                        callback.onTaskComplete();
+                        callback.onTaskCompleteWithStatistics(finalStats);
                     } else {
-                        callback.onTaskFailed(specialCount);
+                        callback.onTaskFailedWithStatistics(finalStats);
                     }
                 } catch (Throwable t) {
                     logFaultyCallback(t);
@@ -874,48 +1704,159 @@ public class CacheManager {
 
         @Override
         public void run() {
-            if (!mAction.preCheck()) {
-                mManager.mMainHandler.post(() -> onPostExecute(0));
-                return;
-            }
-
-            int tileCounter = 0;
-            int errors = 0;
-
-            for (final long tile : mTiles) {
-                if (isCancelled()) {
-                    int finalErrors1 = errors;
-                    mManager.mMainHandler.post(() -> onPostExecute(finalErrors1));
+            // Capture the executing thread for proper interruption handling
+            mExecutingThread = Thread.currentThread();
+            
+            try {
+                if (!mAction.preCheck()) {
+                    mManager.mMainHandler.post(() -> onPostExecute(0));
                     return;
                 }
+
+                int tileCounter = 0;
+                int errors = 0;
+                
+                // Check if we should use bulk optimization
+                boolean useBulkOptimization = shouldUseBulkOptimization();
+
+                if (useBulkOptimization) {
+                    // Use BulkOperationOptimizer for better performance
+                    errors = processTilesWithBulkOptimization();
+                    tileCounter = mTiles.size();
+                } else {
+                    // Traditional sequential processing
+                    for (final long tile : mTiles) {
+                        // Check both cancellation flag and thread interruption
+                        if (isCancelled() || Thread.currentThread().isInterrupted()) {
+                            int finalErrors1 = errors;
+                            mManager.mMainHandler.post(() -> onPostExecute(finalErrors1));
+                            return;
+                        }
+                        final int zoom = MapTileIndex.getZoom(tile);
+                        if (zoom >= mZoomMin && zoom <= mZoomMax) {
+                            boolean hadError = mAction.tileAction(tile);
+                            if (hadError) {
+                                errors++;
+                            }
+                            
+                            // Update progress reporter with batched updates
+                            boolean shouldUpdate = mProgressReporter.updateProgress(zoom, !hadError);
+                            
+                            // Trigger UI update if progress reporter says we should
+                            if (shouldUpdate) {
+                                if (isCancelled() || Thread.currentThread().isInterrupted()) {
+                                    int finalErrors = errors;
+                                    mManager.mMainHandler.post(() -> onPostExecute(finalErrors));
+                                    return;
+                                }
+                                final int finalTileCounter = tileCounter;
+                                final int finalZoom = zoom;
+                                mManager.mMainHandler.post(() -> onProgressUpdate(finalTileCounter, finalZoom));
+                            }
+                        }
+                        tileCounter++;
+                        
+                        // Legacy progress update mechanism (kept for compatibility)
+                        if (tileCounter % mAction.getProgressModulo() == 0) {
+                            // Force update through progress reporter
+                            mProgressReporter.forceUpdate();
+                            
+                            if (isCancelled() || Thread.currentThread().isInterrupted()) {
+                                int finalErrors2 = errors;
+                                mManager.mMainHandler.post(() -> onPostExecute(finalErrors2));
+                                return;
+                            }
+                            final int finalTileCounter = tileCounter;
+                            mManager.mMainHandler.post(() -> onProgressUpdate(finalTileCounter, MapTileIndex.getZoom(tile)));
+                        }
+                    }
+                }
+                
+                final int finalErrors = errors;
+                mManager.mMainHandler.post(() -> onPostExecute(finalErrors));
+            } finally {
+                // Clear the executing thread reference
+                mExecutingThread = null;
+            }
+        }
+        
+        /**
+         * Determines if bulk optimization should be used for this task.
+         * Bulk optimization is beneficial for large tile sets on capable devices.
+         */
+        private boolean shouldUseBulkOptimization() {
+            // Only use bulk optimization for large tile sets
+            if (mTiles.size() < 100) {
+                return false;
+            }
+            
+            // Check if bulk optimizer is available and parallel processing is enabled
+            BulkOperationOptimizer optimizer = mManager.mBulkOperationOptimizer;
+            return optimizer != null && optimizer.isParallelProcessingEnabled();
+        }
+        
+        /**
+         * Processes tiles using the BulkOperationOptimizer for better performance.
+         * 
+         * @return Number of errors encountered
+         */
+        private int processTilesWithBulkOptimization() {
+            // Convert tiles to a list for bulk processing
+            final List<Long> tileList = new ArrayList<>(mTiles.size());
+            for (Long tile : mTiles) {
                 final int zoom = MapTileIndex.getZoom(tile);
                 if (zoom >= mZoomMin && zoom <= mZoomMax) {
-                    if (mAction.tileAction(tile)) {
-                        errors++;
-                    }
-                }
-                tileCounter++;
-                if (tileCounter % mAction.getProgressModulo() == 0) {
-                    if (isCancelled()) {
-                        int finalErrors2 = errors;
-                        mManager.mMainHandler.post(() -> onPostExecute(finalErrors2));
-                        return;
-                    }
-                    final int finalTileCounter = tileCounter;
-                    mManager.mMainHandler.post(() -> onProgressUpdate(finalTileCounter, MapTileIndex.getZoom(tile)));
+                    tileList.add(tile);
                 }
             }
-            final int finalErrors = errors;
-            mManager.mMainHandler.post(() -> onPostExecute(finalErrors));
+            
+            // Create a tile operation wrapper
+            BulkOperationOptimizer.TileOperation operation = new BulkOperationOptimizer.TileOperation() {
+                private final AtomicInteger processedCount = new AtomicInteger(0);
+                
+                @Override
+                public boolean execute(long tileIndex) {
+                    // Check for cancellation
+                    if (isCancelled() || Thread.currentThread().isInterrupted()) {
+                        return false;
+                    }
+                    
+                    // Execute the tile action
+                    boolean hadError = mAction.tileAction(tileIndex);
+                    
+                    // Update progress periodically
+                    int count = processedCount.incrementAndGet();
+                    if (count % mAction.getProgressModulo() == 0) {
+                        final int zoom = MapTileIndex.getZoom(tileIndex);
+                        mProgressReporter.updateProgress(zoom, !hadError);
+                        
+                        // Post progress update to main thread
+                        mManager.mMainHandler.post(() -> onProgressUpdate(count, zoom));
+                    }
+                    
+                    return hadError;
+                }
+            };
+            
+            // Process tiles in batches
+            BulkOperationOptimizer.BatchResult result = 
+                mManager.mBulkOperationOptimizer.processTilesBatched(tileList, operation);
+            
+            // Return error count
+            return result.errorCount;
         }
 
         public void cancel(boolean mayInterruptIfRunning) {
             mCancelled = true;
+            // Interrupt the executing thread if requested and available
+            if (mayInterruptIfRunning && mExecutingThread != null) {
+                mExecutingThread.interrupt();
+            }
             onCancelled();
         }
 
         public boolean isCancelled() {
-            return mCancelled;
+            return mCancelled || (mExecutingThread != null && mExecutingThread.isInterrupted());
         }
     }
 
