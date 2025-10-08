@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.ArrayMap;
 import android.view.GestureDetector;
 import android.view.GestureDetector.OnGestureListener;
 import android.view.KeyEvent;
@@ -146,7 +147,7 @@ public class MapView extends ViewGroup implements IMapView,
     private boolean horizontalMapRepetitionEnabled = true;
     private boolean verticalMapRepetitionEnabled = true;
 
-    private GeoPoint mCenter;
+    private GeoPoint mCenter = new GeoPoint(0., 0);
     private long mMapScrollX;
     private long mMapScrollY;
     protected List<MapListener> mListners = new ArrayList<>();
@@ -155,6 +156,14 @@ public class MapView extends ViewGroup implements IMapView,
 
 
     private boolean mZoomRounding;
+
+    // Projection caching infrastructure
+    private long mProjectionVersion = 0;
+    private final Object mProjectionLock = new Object();
+
+    // Layout point caching - reduces coordinate conversion overhead
+    private final ArrayMap<IGeoPoint, Point> mLayoutPointCache = new ArrayMap<>(50);
+    private long mLayoutCacheVersion = 0;
 
     /**
      * @since 6.0.3
@@ -368,23 +377,46 @@ public class MapView extends ViewGroup implements IMapView,
      */
     @Override
     public Projection getProjection() {
-        if (mProjection == null) {
-            Projection localCopy = new Projection(this);
-            mProjection = localCopy;
-            localCopy.adjustOffsets(mMultiTouchScaleGeoPoint, mMultiTouchScaleCurrentPoint);
-            if (mScrollableAreaLimitLatitude) {
-                localCopy.adjustOffsets(
-                        mScrollableAreaLimitNorth, mScrollableAreaLimitSouth, true,
-                        mScrollableAreaLimitExtraPixelHeight);
+        synchronized (mProjectionLock) {
+            long currentVersion = computeProjectionVersion();
+            if (mProjection == null || mProjectionVersion != currentVersion) {
+                Projection localCopy = (mProjection == null) ? new Projection(this) : mProjection;
+                if (mProjection == null) {
+                    mProjection = localCopy;
+                } else {
+                    // Reuse existing Projection object by updating its state
+                    localCopy.update(this);
+                }
+                localCopy.adjustOffsets(mMultiTouchScaleGeoPoint, mMultiTouchScaleCurrentPoint);
+                if (mScrollableAreaLimitLatitude) {
+                    localCopy.adjustOffsets(
+                            mScrollableAreaLimitNorth, mScrollableAreaLimitSouth, true,
+                            mScrollableAreaLimitExtraPixelHeight);
+                }
+                if (mScrollableAreaLimitLongitude) {
+                    localCopy.adjustOffsets(
+                            mScrollableAreaLimitWest, mScrollableAreaLimitEast, false,
+                            mScrollableAreaLimitExtraPixelWidth);
+                }
+                mImpossibleFlinging = localCopy.setMapScroll(this);
+                mProjectionVersion = currentVersion;
             }
-            if (mScrollableAreaLimitLongitude) {
-                localCopy.adjustOffsets(
-                        mScrollableAreaLimitWest, mScrollableAreaLimitEast, false,
-                        mScrollableAreaLimitExtraPixelWidth);
-            }
-            mImpossibleFlinging = localCopy.setMapScroll(this);
+            return mProjection;
         }
-        return mProjection;
+    }
+
+    /**
+     * Computes a version number for the projection based on map state.
+     * When this changes, the projection needs to be recreated.
+     * @return version number based on zoom, scroll, and orientation
+     * @since 6.1.22-lostrat
+     */
+    private long computeProjectionVersion() {
+        long version = Double.doubleToLongBits(getZoomLevelDouble());
+        version = 31 * version + (long)getMapScrollX();
+        version = 31 * version + (long)getMapScrollY();
+        version = 31 * version + Float.floatToIntBits(getMapOrientation());
+        return version;
     }
 
     /**
@@ -946,6 +978,13 @@ public class MapView extends ViewGroup implements IMapView,
         resetProjection();
         final int count = getChildCount();
 
+        // Clear cache if projection changed
+        long currentVersion = mProjectionVersion;
+        if (mLayoutCacheVersion != currentVersion) {
+            mLayoutPointCache.clear();
+            mLayoutCacheVersion = currentVersion;
+        }
+
         for (int i = 0; i < count; i++) {
             final View child = getChildAt(i);
             if (child.getVisibility() != GONE) {
@@ -953,14 +992,24 @@ public class MapView extends ViewGroup implements IMapView,
                 final MapView.LayoutParams lp = (MapView.LayoutParams) child.getLayoutParams();
                 final int childHeight = child.getMeasuredHeight();
                 final int childWidth = child.getMeasuredWidth();
-                getProjection().toPixels(lp.geoPoint, mLayoutPoint);
-                // Apply rotation of mLayoutPoint around the center of the map
-                if (getMapOrientation() != 0) {
-                    Point p = getProjection().rotateAndScalePoint(mLayoutPoint.x, mLayoutPoint.y,
-                            null);
-                    mLayoutPoint.x = p.x;
-                    mLayoutPoint.y = p.y;
+
+                // Check cache first
+                Point cachedPoint = mLayoutPointCache.get(lp.geoPoint);
+                if (cachedPoint != null) {
+                    mLayoutPoint.set(cachedPoint.x, cachedPoint.y);
+                } else {
+                    getProjection().toPixels(lp.geoPoint, mLayoutPoint);
+                    // Apply rotation of mLayoutPoint around the center of the map
+                    if (getMapOrientation() != 0) {
+                        Point p = getProjection().rotateAndScalePoint(mLayoutPoint.x, mLayoutPoint.y,
+                                null);
+                        mLayoutPoint.x = p.x;
+                        mLayoutPoint.y = p.y;
+                    }
+                    // Cache the result (after rotation)
+                    mLayoutPointCache.put(lp.geoPoint, new Point(mLayoutPoint.x, mLayoutPoint.y));
                 }
+
                 final long x = mLayoutPoint.x;
                 final long y = mLayoutPoint.y;
                 long childLeft = x;
@@ -1263,7 +1312,9 @@ public class MapView extends ViewGroup implements IMapView,
         }
         if (Configuration.getInstance().isDebugMapView()) {
             final long endMs = System.currentTimeMillis();
-            Log.d(IMapView.LOGTAG, "Rendering overall: " + (endMs - startMs) + "ms");
+            // Log.d(IMapView.LOGTAG, "Rendering overall: " + (endMs - startMs) + "ms" +
+            //         " | Projection cache: " + (mProjectionVersion > 0 ? "HIT" : "MISS") +
+            //         " | Layout cache size: " + mLayoutPointCache.size());
         }
     }
 
