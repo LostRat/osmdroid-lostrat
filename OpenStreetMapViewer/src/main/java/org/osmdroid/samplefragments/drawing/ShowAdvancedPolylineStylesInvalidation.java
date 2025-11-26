@@ -101,8 +101,6 @@ public class ShowAdvancedPolylineStylesInvalidation extends BaseSampleFragment i
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-
         // create border paint
         paintBorder.setColor(Color.BLACK);
         paintBorder.setAntiAlias(true);
@@ -137,6 +135,8 @@ public class ShowAdvancedPolylineStylesInvalidation extends BaseSampleFragment i
         mExtendedData.add(new PointWithScalar(new GeoPoint(40.5, -11.5), 60.f));
         mExtendedData.add(new PointWithScalar(new GeoPoint(41.0, -11.0), 100.0f));
         mExtendedData.add(new PointWithScalar(new GeoPoint(41.5, -11.5), 100.0f));
+
+        super.onViewCreated(view, savedInstanceState);
 
         // center to line once here
         centerToLine();
