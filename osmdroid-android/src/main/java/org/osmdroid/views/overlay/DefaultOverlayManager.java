@@ -47,12 +47,16 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     private static final int GRID_SIZE = 256; // pixels per grid cell
     private static final int GRID_WIDTH = 50; // grid cells horizontally
     private static final int GRID_HEIGHT = 50; // grid cells vertically
-    private static final int MAX_OVERLAYS_PER_CELL = 50; // hard limit per cell
     private static final int SPATIAL_INDEX_THRESHOLD = 100; // min overlays to use spatial index
 
-    // Pre-allocated grid structure - fixed memory footprint
-    private final Overlay[][] spatialGrid = new Overlay[GRID_HEIGHT][GRID_WIDTH * MAX_OVERLAYS_PER_CELL];
-    private final int[] cellCounts = new int[GRID_WIDTH * GRID_HEIGHT];
+    // Dynamic grid structure - avoids data loss
+    private final ArrayList<Overlay>[] spatialGrid = new ArrayList[GRID_WIDTH * GRID_HEIGHT];
+
+    {
+        for (int i = 0; i < spatialGrid.length; i++) {
+            spatialGrid[i] = new ArrayList<>();
+        }
+    }
 
     private final List<Overlay> mVisibleOverlays = new ArrayList<>();
     private BoundingBox mLastViewport = null;
@@ -554,10 +558,9 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
      * @since Memory optimization
      */
     private void buildSpatialIndex(MapView mapView) {
-        // Clear previous index - no memory allocation
-        Arrays.fill(cellCounts, 0);
-        for (int i = 0; i < spatialGrid.length; i++) {
-            Arrays.fill(spatialGrid[i], null);
+        // Clear previous index - reuse memory
+        for (ArrayList<Overlay> cell : spatialGrid) {
+            cell.clear();
         }
 
         // Only use spatial index if we have enough overlays to benefit
@@ -565,30 +568,24 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             return; // Use direct search for small overlay counts
         }
 
-        Log.d(IMapView.LOGTAG, "Building memory-safe spatial index with " + mVisibleOverlays.size() + " visible overlays.");
-
-        // Notify callback if we have a very large number of overlays
-        if (mVisibleOverlays.size() > 5000) {
-            // Suggest reducing overlays by 30% when we have excessive overlay counts
-            notifyMemoryPressure(0.3);
-        }
+        Log.d(IMapView.LOGTAG, "Building spatial index with " + mVisibleOverlays.size() + " visible overlays.");
 
         Projection projection = mapView.getProjection();
 
-        // Add overlays to grid with hard limits - no ArrayList growth
+        // Add overlays to grid - no hard limits
         for (Overlay overlay : mVisibleOverlays) {
             if (overlay instanceof Polyline || overlay instanceof Marker ||
                 overlay instanceof ItemizedIconOverlay) {
-                addOverlayToFixedGrid(overlay, projection);
+                addOverlayToGrid(overlay, projection);
             }
         }
     }
 
     /**
-     * Memory-safe overlay addition to pre-allocated grid with hard cell limits
+     * Overlay addition to grid - no hard cell limits
      * @since Memory optimization
      */
-    private void addOverlayToFixedGrid(Overlay overlay, Projection projection) {
+    private void addOverlayToGrid(Overlay overlay, Projection projection) {
         BoundingBox bounds = getOverlayBounds(overlay);
         if (bounds == null) return;
 
@@ -604,27 +601,13 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         for (int gridX = startGridX; gridX <= endGridX; gridX++) {
             for (int gridY = startGridY; gridY <= endGridY; gridY++) {
                 int cellIndex = gridY * GRID_WIDTH + gridX;
-
-                // Only add if cell has space - prevents memory issues
-                if (cellCounts[cellIndex] < MAX_OVERLAYS_PER_CELL) {
-                    int arrayIndex = gridX * MAX_OVERLAYS_PER_CELL + cellCounts[cellIndex];
-                    spatialGrid[gridY][arrayIndex] = overlay;
-                    cellCounts[cellIndex]++;
-                } else {
-                    // Log when cell is full for monitoring
-                    Log.w(IMapView.LOGTAG, "Spatial index cell (" + gridX + "," + gridY + ") is full with " + MAX_OVERLAYS_PER_CELL + " overlays. Overlay not indexed (graceful degradation).");
-
-                    // Notify application callback about memory pressure
-                    // Suggest reducing overlays by 20% when spatial index cells start filling up
-                    notifyMemoryPressure(0.2);
-                }
-                // If cell is full, overlay is simply not indexed (graceful degradation)
+                spatialGrid[cellIndex].add(overlay);
             }
         }
     }
 
     /**
-     * Memory-safe overlay lookup from pre-allocated grid
+     * Overlay lookup from grid
      * @since Memory optimization
      */
     private List<Overlay> getOverlaysNearPoint(int x, int y, MapView mapView) {
@@ -633,23 +616,13 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             return new ArrayList<>(mVisibleOverlays);
         }
 
-        List<Overlay> nearby = new ArrayList<>();
-
         int gridX = Math.max(0, Math.min(GRID_WIDTH - 1, x / GRID_SIZE));
         int gridY = Math.max(0, Math.min(GRID_HEIGHT - 1, y / GRID_SIZE));
         int cellIndex = gridY * GRID_WIDTH + gridX;
 
         // Get overlays from this cell
-        int count = cellCounts[cellIndex];
-        for (int i = 0; i < count; i++) {
-            int arrayIndex = gridX * MAX_OVERLAYS_PER_CELL + i;
-            Overlay overlay = spatialGrid[gridY][arrayIndex];
-            if (overlay != null) {
-                nearby.add(overlay);
-            }
-        }
-
-        return nearby;
+        // Return a copy to avoid modification issues if caller iterates
+        return new ArrayList<>(spatialGrid[cellIndex]);
     }
 
     /**
