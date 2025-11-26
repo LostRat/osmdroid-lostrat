@@ -24,7 +24,10 @@ import org.osmdroid.util.TileSystem;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.CopyrightOverlay;
 
+import androidx.annotation.NonNull;
+import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Lifecycle;
 
 public abstract class BaseSampleFragment extends Fragment {
     private static int MENU_LAST_ID = Menu.FIRST; // Always set to last unused id
@@ -47,7 +50,6 @@ public abstract class BaseSampleFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setHasOptionsMenu(true);
         Log.d(TAG, "onCreate");
     }
 
@@ -82,27 +84,151 @@ public abstract class BaseSampleFragment extends Fragment {
         return mMapView;
     }
 
+    public void onViewCreated(View view, Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        requireActivity().addMenuProvider(new MenuProvider() {
+            @Override
+            public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+                MenuItem add = menu.add("Run Tests");
+                MENU_LAST_ID++;
+                MENU_VERTICAL_REPLICATION = MENU_LAST_ID;
+                menu.add(0, MENU_VERTICAL_REPLICATION, Menu.NONE, "Vertical Replication").setCheckable(true);
+                MENU_LAST_ID++;
+                MENU_HORIZTONAL_REPLICATION = MENU_LAST_ID;
+                menu.add(0, MENU_HORIZTONAL_REPLICATION, Menu.NONE, "Horizontal Replication").setCheckable(true);
 
-    @Override
-    public void onPause() {
-        if (mMapView != null) {
-            mMapView.onPause();
-        }
-        super.onPause();
-    }
+                MENU_LAST_ID++;
+                MENU_SCALE_TILES = MENU_LAST_ID;
+                menu.add(0, MENU_SCALE_TILES, Menu.NONE, "Scale Tiles").setCheckable(true);
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (mMapView != null) {
-            mMapView.onResume();
-        }
-    }
+                MENU_LAST_ID++;
+                MENU_GOTO = MENU_LAST_ID;
+                menu.add(0, MENU_GOTO, Menu.NONE, "Go To");
 
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-        Log.d(TAG, "onActivityCreated");
+                MENU_LAST_ID++;
+                MENU_ROTATE_CLOCKWISE = MENU_LAST_ID;
+                menu.add(0, MENU_ROTATE_CLOCKWISE, Menu.NONE, "Rotate Clockwise");
+
+                MENU_LAST_ID++;
+                MENU_ROTATE_COUNTER_CLOCKWISE = MENU_LAST_ID;
+                menu.add(0, MENU_ROTATE_COUNTER_CLOCKWISE, Menu.NONE, "Rotate Counter Clockwise");
+                // Put overlay items first
+                try {
+                    mMapView.getOverlayManager().onCreateOptionsMenu(menu, MENU_LAST_ID, mMapView);
+                } catch (NullPointerException npe) {
+                    //can happen during CI tests and very rapid fragment switching
+                }
+            }
+
+            @Override
+            public void onPrepareMenu(@NonNull Menu menu) {
+                try {
+                    MenuItem item = menu.findItem(MENU_VERTICAL_REPLICATION);
+                    item.setChecked(mMapView.isVerticalMapRepetitionEnabled());
+                    item = menu.findItem(MENU_HORIZTONAL_REPLICATION);
+                    item.setChecked(mMapView.isHorizontalMapRepetitionEnabled());
+
+                    item = menu.findItem(MENU_SCALE_TILES);
+                    item.setChecked(mMapView.isTilesScaledToDpi());
+                    mMapView.getOverlayManager().onPrepareOptionsMenu(menu, MENU_LAST_ID, mMapView);
+                } catch (NullPointerException npe) {
+                    //can happen during CI tests and very rapid fragment switching
+                }
+            }
+
+            @Override
+            public boolean onMenuItemSelected(@NonNull MenuItem item) {
+                if (item.getTitle() != null && item.getTitle().toString().equals("Run Tests")) {
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                runTestProcedures();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }).start();
+                    return true;
+                } else if (item.getItemId() == MENU_HORIZTONAL_REPLICATION) {
+                    mMapView.setHorizontalMapRepetitionEnabled(!mMapView.isHorizontalMapRepetitionEnabled());
+                    mMapView.invalidate();
+                    return true;
+                } else if (item.getItemId() == MENU_VERTICAL_REPLICATION) {
+                    mMapView.setVerticalMapRepetitionEnabled(!mMapView.isVerticalMapRepetitionEnabled());
+                    mMapView.invalidate();
+                    return true;
+                } else if (item.getItemId() == MENU_SCALE_TILES) {
+                    mMapView.setTilesScaledToDpi(!mMapView.isTilesScaledToDpi());
+                    mMapView.invalidate();
+                    return true;
+                } else if (item.getItemId() == MENU_ROTATE_CLOCKWISE) {
+                    float currentRotation = mMapView.getMapOrientation() + 10;
+                    if (currentRotation > 360)
+                        currentRotation = currentRotation - 360;
+                    mMapView.setMapOrientation(currentRotation, true);
+
+                    return true;
+                } else if (item.getItemId() == MENU_ROTATE_COUNTER_CLOCKWISE) {
+                    float currentRotation = mMapView.getMapOrientation() - 10;
+                    if (currentRotation < 0)
+                        currentRotation = currentRotation + 360;
+                    mMapView.setMapOrientation(currentRotation, true);
+                    return true;
+                } else if (item.getItemId() == MENU_GOTO) {
+                    //TODO dialog with lat/lon prompt
+                    //prompt for input params
+                    AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+
+                    View view = View.inflate(getActivity(), R.layout.gotolocation, null);
+
+                    final EditText lat = (EditText) view.findViewById(R.id.latlonPicker_latitude);
+                    final EditText lon = (EditText) view.findViewById(R.id.latlonPicker_longitude);
+                    final Button cancel = (Button) view.findViewById(R.id.latlonPicker_cancel);
+                    cancel.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            gotoLocationDialog.dismiss();
+                        }
+                    });
+
+                    Button ok = (Button) view.findViewById(R.id.latlonPicker_ok);
+                    ok.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            gotoLocationDialog.dismiss();
+                            try {
+                                double latd = Double.parseDouble(lat.getText().toString());
+                                if (latd < mMapView.getTileSystem().getMinLatitude() || latd > mMapView.getTileSystem().getMaxLatitude())
+                                    throw new Exception();
+                                double lond = Double.parseDouble(lon.getText().toString());
+                                if (lond < mMapView.getTileSystem().getMinLongitude() || lond > mMapView.getTileSystem().getMaxLongitude())
+                                    throw new Exception();
+                                GeoPoint pt = new GeoPoint(latd, lond);
+                                mMapView.getController().animateTo(pt);
+                            } catch (Exception ex) {
+                                Toast.makeText(getActivity(), "Invalid input", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+
+                    builder.setView(view);
+                    builder.setCancelable(true);
+                    builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+                        @Override
+                        public void onCancel(DialogInterface dialog) {
+                            gotoLocationDialog.dismiss();
+                        }
+                    });
+                    gotoLocationDialog = builder.create();
+                    gotoLocationDialog.show();
+
+                } else if (mMapView.getOverlayManager().onOptionsItemSelected(item, MENU_LAST_ID, mMapView)) {
+                    return true;
+                }
+                return false;
+            }
+        }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
 
         if (mMapView != null) {
             addOverlays();
@@ -142,151 +268,6 @@ public abstract class BaseSampleFragment extends Fragment {
     int MENU_ROTATE_COUNTER_CLOCKWISE = 0;
     int MENU_SCALE_TILES = 0;
     int MENU_GOTO = 0;
-
-
-    @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        MenuItem add = menu.add("Run Tests");
-        MENU_LAST_ID++;
-        MENU_VERTICAL_REPLICATION = MENU_LAST_ID;
-        menu.add(0, MENU_VERTICAL_REPLICATION, Menu.NONE, "Vertical Replication").setCheckable(true);
-        MENU_LAST_ID++;
-        MENU_HORIZTONAL_REPLICATION = MENU_LAST_ID;
-        menu.add(0, MENU_HORIZTONAL_REPLICATION, Menu.NONE, "Horizontal Replication").setCheckable(true);
-
-        MENU_LAST_ID++;
-        MENU_SCALE_TILES = MENU_LAST_ID;
-        menu.add(0, MENU_SCALE_TILES, Menu.NONE, "Scale Tiles").setCheckable(true);
-
-        MENU_LAST_ID++;
-        MENU_GOTO = MENU_LAST_ID;
-        menu.add(0, MENU_GOTO, Menu.NONE, "Go To");
-
-        MENU_LAST_ID++;
-        MENU_ROTATE_CLOCKWISE = MENU_LAST_ID;
-        menu.add(0, MENU_ROTATE_CLOCKWISE, Menu.NONE, "Rotate Clockwise");
-
-        MENU_LAST_ID++;
-        MENU_ROTATE_COUNTER_CLOCKWISE = MENU_LAST_ID;
-        menu.add(0, MENU_ROTATE_COUNTER_CLOCKWISE, Menu.NONE, "Rotate Counter Clockwise");
-        // Put overlay items first
-        try {
-            mMapView.getOverlayManager().onCreateOptionsMenu(menu, MENU_LAST_ID, mMapView);
-        } catch (NullPointerException npe) {
-            //can happen during CI tests and very rapid fragment switching
-        }
-        super.onCreateOptionsMenu(menu, inflater);
-    }
-
-    @Override
-    public void onPrepareOptionsMenu(Menu menu) {
-        try {
-            MenuItem item = menu.findItem(MENU_VERTICAL_REPLICATION);
-            item.setChecked(mMapView.isVerticalMapRepetitionEnabled());
-            item = menu.findItem(MENU_HORIZTONAL_REPLICATION);
-            item.setChecked(mMapView.isHorizontalMapRepetitionEnabled());
-
-            item = menu.findItem(MENU_SCALE_TILES);
-            item.setChecked(mMapView.isTilesScaledToDpi());
-            mMapView.getOverlayManager().onPrepareOptionsMenu(menu, MENU_LAST_ID, mMapView);
-        } catch (NullPointerException npe) {
-            //can happen during CI tests and very rapid fragment switching
-        }
-        super.onPrepareOptionsMenu(menu);
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getTitle() != null && item.getTitle().toString().equals("Run Tests")) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        runTestProcedures();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }).start();
-            return true;
-        } else if (item.getItemId() == MENU_HORIZTONAL_REPLICATION) {
-            mMapView.setHorizontalMapRepetitionEnabled(!mMapView.isHorizontalMapRepetitionEnabled());
-            mMapView.invalidate();
-            return true;
-        } else if (item.getItemId() == MENU_VERTICAL_REPLICATION) {
-            mMapView.setVerticalMapRepetitionEnabled(!mMapView.isVerticalMapRepetitionEnabled());
-            mMapView.invalidate();
-            return true;
-        } else if (item.getItemId() == MENU_SCALE_TILES) {
-            mMapView.setTilesScaledToDpi(!mMapView.isTilesScaledToDpi());
-            mMapView.invalidate();
-            return true;
-        } else if (item.getItemId() == MENU_ROTATE_CLOCKWISE) {
-            float currentRotation = mMapView.getMapOrientation() + 10;
-            if (currentRotation > 360)
-                currentRotation = currentRotation - 360;
-            mMapView.setMapOrientation(currentRotation, true);
-
-            return true;
-        } else if (item.getItemId() == MENU_ROTATE_COUNTER_CLOCKWISE) {
-            float currentRotation = mMapView.getMapOrientation() - 10;
-            if (currentRotation < 0)
-                currentRotation = currentRotation + 360;
-            mMapView.setMapOrientation(currentRotation, true);
-            return true;
-        } else if (item.getItemId() == MENU_GOTO) {
-            //TODO dialog with lat/lon prompt
-            //prompt for input params
-            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-
-            View view = View.inflate(getActivity(), R.layout.gotolocation, null);
-
-            final EditText lat = (EditText) view.findViewById(R.id.latlonPicker_latitude);
-            final EditText lon = (EditText) view.findViewById(R.id.latlonPicker_longitude);
-            final Button cancel = (Button) view.findViewById(R.id.latlonPicker_cancel);
-            cancel.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    gotoLocationDialog.dismiss();
-                }
-            });
-
-            Button ok = (Button) view.findViewById(R.id.latlonPicker_ok);
-            ok.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    gotoLocationDialog.dismiss();
-                    try {
-                        double latd = Double.parseDouble(lat.getText().toString());
-                        if (latd < TileSystem.MinLatitude || latd > TileSystem.MaxLatitude)
-                            throw new Exception();
-                        double lond = Double.parseDouble(lon.getText().toString());
-                        if (lond < TileSystem.MinLongitude || lond > TileSystem.MaxLongitude)
-                            throw new Exception();
-                        GeoPoint pt = new GeoPoint(latd, lond);
-                        mMapView.getController().animateTo(pt);
-                    } catch (Exception ex) {
-                        Toast.makeText(getActivity(), "Invalid input", Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-
-            builder.setView(view);
-            builder.setCancelable(true);
-            builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
-                @Override
-                public void onCancel(DialogInterface dialog) {
-                    gotoLocationDialog.dismiss();
-                }
-            });
-            gotoLocationDialog = builder.create();
-            gotoLocationDialog.show();
-
-        } else if (mMapView.getOverlayManager().onOptionsItemSelected(item, MENU_LAST_ID, mMapView)) {
-            return true;
-        }
-        return false;
-    }
 
     /**
      * An appropriate place to override and add overlays.

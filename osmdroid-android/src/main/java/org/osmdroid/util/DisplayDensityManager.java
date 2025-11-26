@@ -1,6 +1,7 @@
 package org.osmdroid.util;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
@@ -76,9 +77,10 @@ public class DisplayDensityManager {
 
     private void initializeMetrics(Context context) {
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        Configuration config = context.getResources().getConfiguration();
 
         mDensity = metrics.density;
-        mScaledDensity = metrics.scaledDensity;
+        mScaledDensity = mDensity * config.fontScale;
         mDensityDpi = metrics.densityDpi;
         mXdpi = metrics.xdpi;
         mYdpi = metrics.ydpi;

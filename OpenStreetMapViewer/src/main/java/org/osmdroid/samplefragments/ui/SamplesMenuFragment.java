@@ -90,7 +90,7 @@ public class SamplesMenuFragment extends Fragment {
                         //restore the list
                         additionActivitybasedSamples = new ArrayList<>();
                         for (int i = 0; i < acts.size(); i++) {
-                            additionActivitybasedSamples.add((IBaseActivity) Class.forName(acts.get(i)).newInstance());
+                            additionActivitybasedSamples.add((IBaseActivity) Class.forName(acts.get(i)).getConstructor().newInstance());
                         }
                     }
                 } catch (Throwable t) {
@@ -122,7 +122,7 @@ public class SamplesMenuFragment extends Fragment {
                     // Replace Fragment with selected sample
                     BaseSampleFragment frag = (BaseSampleFragment) o;
                     Log.i(TAG, "loading fragment " + frag.getSampleTitle() + ", " + frag.getClass().getCanonicalName());
-                    FragmentManager fm = getFragmentManager();
+                    FragmentManager fm = getParentFragmentManager();
                     fm.beginTransaction().replace(org.osmdroid.R.id.samples_container, frag, ExtraSamplesActivity.SAMPLES_FRAGMENT_TAG)
                             .addToBackStack(null).commit();
                 } else if (o != null && o instanceof IBaseActivity && o instanceof Activity) {
@@ -144,8 +144,8 @@ public class SamplesMenuFragment extends Fragment {
     }
 
     @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
+    public void onViewCreated(View view, Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
 
         //the following block of code took me an entire weekend to track down the root cause.
         //if the code block is in onCreate, it will leak. onActivityCreated = no leak.
