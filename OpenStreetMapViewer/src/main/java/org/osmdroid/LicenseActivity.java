@@ -45,7 +45,7 @@ public class LicenseActivity extends AppCompatActivity implements AdapterView.On
 
     @Override
     public boolean onSupportNavigateUp() {
-        onBackPressed();
+        getOnBackPressedDispatcher().onBackPressed();
         return true;
     }
 

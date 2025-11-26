@@ -140,7 +140,7 @@ public class PreferenceActivity extends AppCompatActivity implements View.OnClic
 
     @Override
     public boolean onSupportNavigateUp() {
-        onBackPressed();
+        getOnBackPressedDispatcher().onBackPressed();
         return true;
     }
 
