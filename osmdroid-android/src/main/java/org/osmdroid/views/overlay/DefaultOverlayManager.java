@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import java.util.Arrays;
@@ -81,8 +82,8 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         }
     }
 
-    private final Map<OverlayLayer, List<Overlay>> mLayeredOverlays = new HashMap<>();
-    private final Map<Overlay, OverlayLayer> mOverlayToLayer = new HashMap<>();
+    private final Map<OverlayLayer, List<Overlay>> mLayeredOverlays = new ConcurrentHashMap<>();
+    private final Map<Overlay, OverlayLayer> mOverlayToLayer = new ConcurrentHashMap<>();
     private boolean mUseLayerSystem = true;
 
     // Optional application cache coordination callback
