@@ -847,7 +847,20 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
      * This method uses the standard `execSQL` for PRAGMA statements.
      */
     private void applyLegacyOptimizations() {
+
+      try {
         mDb.enableWriteAheadLogging();
+      } catch (SQLiteException ex) {
+        // Treat as non-fatal; only impacts performance.
+        Log.w(
+          IMapView.LOGTAG,
+          "Failed to enable WAL; continuing without it",
+          ex
+        );
+      }
+
+
+
         mDb.execSQL("PRAGMA synchronous = NORMAL");
         mDb.execSQL("PRAGMA cache_size = 10000");
         mDb.execSQL("PRAGMA temp_store = MEMORY");
@@ -961,7 +974,24 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
      * @since 6.0.2
      */
     private void createIndex(final SQLiteDatabase pDb) {
+      if (pDb == null || !pDb.isOpen() || pDb.isReadOnly()) {
+        // Skip if not writable; index is an optimization, not critical.
+        return;
+      }
+
+      try {
         pDb.execSQL("CREATE INDEX IF NOT EXISTS " + COLUMN_EXPIRES_INDEX + " ON " + TABLE + " (" + COLUMN_EXPIRES + ");");
+      } catch (SQLiteException ex) {
+        // Treat as non-fatal; a missing index only impacts performance.
+        Log.w(
+          IMapView.LOGTAG,
+          "Failed to create expires index on tile cache; continuing without it",
+          ex
+        );
+        catchException(ex);
+      } catch (Exception ex) {
+        catchException(ex);
+      }
     }
 
     /**
@@ -970,7 +1000,9 @@ public class SqlTileWriter implements IFilesystemCache, SplashScreenable {
     @Override
     public void runDuringSplashScreen() {
         final SQLiteDatabase db = getDb();
-        createIndex(db);
+        if (db != null && db.isOpen()) {
+          createIndex(db);
+        }
     }
 
     /**
