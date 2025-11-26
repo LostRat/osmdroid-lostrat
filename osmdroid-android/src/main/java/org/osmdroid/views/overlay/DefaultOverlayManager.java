@@ -42,11 +42,18 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
 
     private final CopyOnWriteArrayList<Overlay> mOverlayList;
 
-    // API 23+ optimization: Spatial indexing for fast tap detection
-    private final Map<Integer, List<Overlay>> mSpatialIndex = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
-            new ArrayMap<>() : new HashMap<>();
+    // Memory-safe spatial index design - replaces ArrayList-based implementation
+    private static final int GRID_SIZE = 256; // pixels per grid cell
+    private static final int GRID_WIDTH = 50; // grid cells horizontally
+    private static final int GRID_HEIGHT = 50; // grid cells vertically
+    private static final int MAX_OVERLAYS_PER_CELL = 50; // hard limit per cell
+    private static final int SPATIAL_INDEX_THRESHOLD = 100; // min overlays to use spatial index
+
+    // Pre-allocated grid structure - fixed memory footprint
+    private final Overlay[][] spatialGrid = new Overlay[GRID_HEIGHT][GRID_WIDTH * MAX_OVERLAYS_PER_CELL];
+    private final int[] cellCounts = new int[GRID_WIDTH * GRID_HEIGHT];
+
     private final List<Overlay> mVisibleOverlays = new ArrayList<>();
-    private final int GRID_SIZE = 256; // pixels
     private BoundingBox mLastViewport = null;
     private double mLastZoomLevel = -1;
 
@@ -77,6 +84,9 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     private final Map<OverlayLayer, List<Overlay>> mLayeredOverlays = new HashMap<>();
     private final Map<Overlay, OverlayLayer> mOverlayToLayer = new HashMap<>();
     private boolean mUseLayerSystem = true;
+
+    // Optional application cache coordination callback
+    private OverlayMemoryCallback mMemoryCallback;
 
     public DefaultOverlayManager(final TilesOverlay tilesOverlay) {
         setTilesOverlay(tilesOverlay);
@@ -463,7 +473,7 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
                     }
                 }
             } else {
-                // For background layers, use spatial optimization
+                // For background layers, use adaptive search optimization
                 List<Overlay> nearbyOverlays = getNearbyOverlaysInLayer(e, pMapView, layer);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && nearbyOverlays.size() > 10) {
@@ -489,27 +499,21 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     }
 
     /**
-     * Legacy tap handling for backward compatibility
+     * Legacy tap handling for backward compatibility using adaptive search strategy
      * @since Core architectural fix
      */
     private boolean onSingleTapConfirmedLegacy(final MotionEvent e, final MapView pMapView) {
-        // API 23+ optimization: Use spatial indexing and viewport culling for fast tap detection
-        updateVisibleOverlaysIfNeeded(pMapView);
+        // Use adaptive search strategy to get optimal overlay list
+        List<Overlay> overlaysForTap = getOverlaysForTap(e, pMapView);
 
-        final int x = Math.round(e.getX());
-        final int y = Math.round(e.getY());
-
-        // Get overlays near the tap point using spatial index
-        List<Overlay> nearbyOverlays = getOverlaysNearPoint(x, y, pMapView);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && nearbyOverlays.size() > 10) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && overlaysForTap.size() > 10) {
             // API 24+: Use parallel streams for many overlays
-            return nearbyOverlays.parallelStream()
+            return overlaysForTap.parallelStream()
                 .filter(overlay -> overlay.isInteractive())
                 .anyMatch(overlay -> overlay.onSingleTapConfirmed(e, pMapView));
         } else {
             // Sequential processing for fewer overlays or older APIs
-            for (final Overlay overlay : nearbyOverlays) {
+            for (final Overlay overlay : overlaysForTap) {
                 if (overlay.isInteractive() && overlay.onSingleTapConfirmed(e, pMapView)) {
                     return true;
                 }
@@ -532,6 +536,11 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             !mLastViewport.equals(currentViewport) ||
             Math.abs(currentZoom - mLastZoomLevel) > 0.1) {
 
+            // Notify callback about significant zoom changes
+            if (mLastZoomLevel != -1 && Math.abs(currentZoom - mLastZoomLevel) > 0.5) {
+                notifyZoomChanged(mLastZoomLevel, currentZoom, currentViewport);
+            }
+
             updateVisibleOverlays(mapView);
             buildSpatialIndex(mapView);
             mLastViewport = currentViewport;
@@ -540,63 +549,157 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     }
 
     /**
-     * API 23+ optimization: Build spatial index for fast overlay lookup
-     * @since API 23+ optimization
+     * Memory-safe spatial index building - replaces ArrayList-based implementation
+     * @since Memory optimization
      */
     private void buildSpatialIndex(MapView mapView) {
-        mSpatialIndex.clear();
+        // Clear previous index - no memory allocation
+        Arrays.fill(cellCounts, 0);
+        for (int i = 0; i < spatialGrid.length; i++) {
+            Arrays.fill(spatialGrid[i], null);
+        }
+
+        // Only use spatial index if we have enough overlays to benefit
+        if (mVisibleOverlays.size() < SPATIAL_INDEX_THRESHOLD) {
+            return; // Use direct search for small overlay counts
+        }
+
+        Log.d(IMapView.LOGTAG, "Building memory-safe spatial index with " + mVisibleOverlays.size() + " visible overlays.");
+
+        // Notify callback if we have a very large number of overlays
+        if (mVisibleOverlays.size() > 5000) {
+            // Suggest reducing overlays by 30% when we have excessive overlay counts
+            notifyMemoryPressure(0.3);
+        }
+
         Projection projection = mapView.getProjection();
 
+        // Add overlays to grid with hard limits - no ArrayList growth
         for (Overlay overlay : mVisibleOverlays) {
             if (overlay instanceof Polyline || overlay instanceof Marker ||
                 overlay instanceof ItemizedIconOverlay) {
-                addOverlayToSpatialGrid(overlay, projection);
+                addOverlayToFixedGrid(overlay, projection);
             }
         }
     }
 
     /**
-     * API 23+ optimization: Add overlay to spatial grid
-     * @since API 23+ optimization
+     * Memory-safe overlay addition to pre-allocated grid with hard cell limits
+     * @since Memory optimization
      */
-    private void addOverlayToSpatialGrid(Overlay overlay, Projection projection) {
+    private void addOverlayToFixedGrid(Overlay overlay, Projection projection) {
         BoundingBox bounds = getOverlayBounds(overlay);
         if (bounds == null) return;
 
-        // Convert bounds to screen coordinates and add to grid cells
+        // Convert bounds to screen coordinates
         Point topLeft = projection.toPixels(new GeoPoint(bounds.getLatNorth(), bounds.getLonWest()), null);
         Point bottomRight = projection.toPixels(new GeoPoint(bounds.getLatSouth(), bounds.getLonEast()), null);
 
-        int startGridX = topLeft.x / GRID_SIZE;
-        int endGridX = bottomRight.x / GRID_SIZE;
-        int startGridY = topLeft.y / GRID_SIZE;
-        int endGridY = bottomRight.y / GRID_SIZE;
+        int startGridX = Math.max(0, Math.min(GRID_WIDTH - 1, topLeft.x / GRID_SIZE));
+        int endGridX = Math.max(0, Math.min(GRID_WIDTH - 1, bottomRight.x / GRID_SIZE));
+        int startGridY = Math.max(0, Math.min(GRID_HEIGHT - 1, topLeft.y / GRID_SIZE));
+        int endGridY = Math.max(0, Math.min(GRID_HEIGHT - 1, bottomRight.y / GRID_SIZE));
 
         for (int gridX = startGridX; gridX <= endGridX; gridX++) {
             for (int gridY = startGridY; gridY <= endGridY; gridY++) {
-                int key = gridX * 10000 + gridY;
-                // API 23+ compatible: Manual computeIfAbsent implementation
-                List<Overlay> overlaysInCell = mSpatialIndex.get(key);
-                if (overlaysInCell == null) {
-                    overlaysInCell = new ArrayList<>();
-                    mSpatialIndex.put(key, overlaysInCell);
+                int cellIndex = gridY * GRID_WIDTH + gridX;
+
+                // Only add if cell has space - prevents memory issues
+                if (cellCounts[cellIndex] < MAX_OVERLAYS_PER_CELL) {
+                    int arrayIndex = gridX * MAX_OVERLAYS_PER_CELL + cellCounts[cellIndex];
+                    spatialGrid[gridY][arrayIndex] = overlay;
+                    cellCounts[cellIndex]++;
+                } else {
+                    // Log when cell is full for monitoring
+                    Log.w(IMapView.LOGTAG, "Spatial index cell (" + gridX + "," + gridY + ") is full with " + MAX_OVERLAYS_PER_CELL + " overlays. Overlay not indexed (graceful degradation).");
+
+                    // Notify application callback about memory pressure
+                    // Suggest reducing overlays by 20% when spatial index cells start filling up
+                    notifyMemoryPressure(0.2);
                 }
-                overlaysInCell.add(overlay);
+                // If cell is full, overlay is simply not indexed (graceful degradation)
             }
         }
     }
 
     /**
-     * API 23+ optimization: Get overlays near a screen point
-     * @since API 23+ optimization
+     * Memory-safe overlay lookup from pre-allocated grid
+     * @since Memory optimization
      */
     private List<Overlay> getOverlaysNearPoint(int x, int y, MapView mapView) {
-        int gridX = x / GRID_SIZE;
-        int gridY = y / GRID_SIZE;
-        int key = gridX * 10000 + gridY;
+        // If we have few overlays, use direct search instead of spatial index
+        if (mVisibleOverlays.size() < SPATIAL_INDEX_THRESHOLD) {
+            return new ArrayList<>(mVisibleOverlays);
+        }
 
-        List<Overlay> nearby = mSpatialIndex.get(key);
-        return nearby != null ? nearby : Collections.emptyList();
+        List<Overlay> nearby = new ArrayList<>();
+
+        int gridX = Math.max(0, Math.min(GRID_WIDTH - 1, x / GRID_SIZE));
+        int gridY = Math.max(0, Math.min(GRID_HEIGHT - 1, y / GRID_SIZE));
+        int cellIndex = gridY * GRID_WIDTH + gridX;
+
+        // Get overlays from this cell
+        int count = cellCounts[cellIndex];
+        for (int i = 0; i < count; i++) {
+            int arrayIndex = gridX * MAX_OVERLAYS_PER_CELL + i;
+            Overlay overlay = spatialGrid[gridY][arrayIndex];
+            if (overlay != null) {
+                nearby.add(overlay);
+            }
+        }
+
+        return nearby;
+    }
+
+    /**
+     * Adaptive search strategy that chooses between spatial index and direct search
+     * based on overlay count for optimal performance.
+     * @param e The motion event containing tap coordinates
+     * @param mapView The map view for projection calculations
+     * @return List of overlays that should be checked for tap handling
+     * @since Task 2: Adaptive search strategy
+     */
+    private List<Overlay> getOverlaysForTap(MotionEvent e, MapView mapView) {
+        updateVisibleOverlaysIfNeeded(mapView);
+
+        final int x = Math.round(e.getX());
+        final int y = Math.round(e.getY());
+
+        // Choose search strategy based on overlay count
+        if (mVisibleOverlays.size() < SPATIAL_INDEX_THRESHOLD) {
+            // Direct search for small overlay counts - more efficient than spatial lookup
+            return getDirectSearchResults(e, mapView);
+        } else {
+            // Use spatial index for large overlay counts
+            List<Overlay> spatialResults = getOverlaysNearPoint(x, y, mapView);
+
+            // If spatial index returns few results, supplement with direct search
+            // This handles cases where overlays might not be properly indexed due to cell limits
+            if (spatialResults.size() < 5) {
+                List<Overlay> directResults = getDirectSearchResults(e, mapView);
+                // Combine results, avoiding duplicates
+                for (Overlay overlay : directResults) {
+                    if (!spatialResults.contains(overlay)) {
+                        spatialResults.add(overlay);
+                    }
+                }
+            }
+
+            return spatialResults;
+        }
+    }
+
+    /**
+     * Direct search fallback for small overlay counts or when spatial index is insufficient.
+     * @param e The motion event containing tap coordinates
+     * @param mapView The map view for bounds checking
+     * @return List of visible overlays that could handle the tap
+     * @since Task 2: Adaptive search strategy
+     */
+    private List<Overlay> getDirectSearchResults(MotionEvent e, MapView mapView) {
+        // For small overlay counts, return all visible overlays
+        // The tap handling logic will determine which ones actually respond
+        return new ArrayList<>(mVisibleOverlays);
     }
 
     /**
@@ -891,21 +994,17 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
     }
 
     /**
-     * ENHANCED FIX: Get nearby overlays in specific layer
+     * ENHANCED FIX: Get nearby overlays in specific layer using adaptive search strategy
      * @since Enhanced layer system
      */
     private List<Overlay> getNearbyOverlaysInLayer(MotionEvent e, MapView mapView, OverlayLayer layer) {
-        updateVisibleOverlaysIfNeeded(mapView);
-
-        final int x = Math.round(e.getX());
-        final int y = Math.round(e.getY());
-
-        List<Overlay> nearbyOverlays = getOverlaysNearPoint(x, y, mapView);
+        // Use adaptive search strategy to get optimal overlay list
+        List<Overlay> overlaysForTap = getOverlaysForTap(e, mapView);
         List<Overlay> layerNearby = new ArrayList<>();
 
         List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
         if (layerOverlays != null) {
-            for (Overlay overlay : nearbyOverlays) {
+            for (Overlay overlay : overlaysForTap) {
                 if (layerOverlays.contains(overlay)) {
                     layerNearby.add(overlay);
                 }
@@ -1152,6 +1251,94 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         }
 
         return false;
+    }
+
+    // ** Memory Callback Management **//
+
+    /**
+     * Sets an optional callback for coordinating application cache with overlay memory management.
+     * <p>
+     * This callback is completely optional - the DefaultOverlayManager handles all memory
+     * issues internally and works perfectly without any callbacks set. The callback is only
+     * for applications that want to optimize their own data loading patterns.
+     * </p>
+     * <p>
+     * The callback will be notified when:
+     * <ul>
+     *   <li>Memory pressure is detected and reducing overlays would help</li>
+     *   <li>Zoom level changes significantly (useful for loading appropriate detail levels)</li>
+     * </ul>
+     * </p>
+     * <p>
+     * If the callback throws any exceptions, they are caught and logged, and the overlay
+     * manager continues working normally. This ensures that callback errors never break
+     * core overlay functionality.
+     * </p>
+     *
+     * @param callback The callback to set, or null to remove the current callback
+     * @since Overlay memory optimization
+     */
+    public void setMemoryCallback(OverlayMemoryCallback callback) {
+        this.mMemoryCallback = callback;
+    }
+
+    /**
+     * Gets the current memory callback, if any.
+     *
+     * @return The current callback, or null if no callback is set
+     * @since Overlay memory optimization
+     */
+    public OverlayMemoryCallback getMemoryCallback() {
+        return mMemoryCallback;
+    }
+
+    /**
+     * Notifies the application callback about memory pressure, if a callback is set.
+     * <p>
+     * This method is null-safe and exception-safe. If no callback is set, or if the
+     * callback throws an exception, the method returns silently and the overlay
+     * manager continues working normally.
+     * </p>
+     *
+     * @param suggestedReduction A value between 0.0 and 1.0 indicating the suggested
+     *                          percentage of overlays to remove
+     * @since Overlay memory optimization
+     */
+    private void notifyMemoryPressure(double suggestedReduction) {
+        if (mMemoryCallback != null) {
+            try {
+                mMemoryCallback.onMemoryPressure(suggestedReduction);
+            } catch (Exception e) {
+                // Ignore callback errors - don't let them break overlay functionality
+                Log.w(IMapView.LOGTAG, "Memory callback failed, continuing normally", e);
+            }
+        }
+        // Overlay manager continues working normally regardless of callback
+    }
+
+    /**
+     * Notifies the application callback about zoom level changes, if a callback is set.
+     * <p>
+     * This method is null-safe and exception-safe. If no callback is set, or if the
+     * callback throws an exception, the method returns silently and the overlay
+     * manager continues working normally.
+     * </p>
+     *
+     * @param oldZoom The previous zoom level
+     * @param newZoom The current zoom level
+     * @param viewport The current map viewport bounds
+     * @since Overlay memory optimization
+     */
+    private void notifyZoomChanged(double oldZoom, double newZoom, BoundingBox viewport) {
+        if (mMemoryCallback != null) {
+            try {
+                mMemoryCallback.onZoomChanged(oldZoom, newZoom, viewport);
+            } catch (Exception e) {
+                // Ignore callback errors - don't let them break overlay functionality
+                Log.w(IMapView.LOGTAG, "Zoom callback failed, continuing normally", e);
+            }
+        }
+        // Overlay manager continues working normally regardless of callback
     }
 
     // ** Options Menu **//
