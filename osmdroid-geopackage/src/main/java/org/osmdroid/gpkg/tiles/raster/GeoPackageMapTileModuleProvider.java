@@ -47,11 +47,13 @@ public class GeoPackageMapTileModuleProvider extends MapTileModuleProviderBase {
 
     protected GeopackageRasterTileSource currentTileSource;
     protected Set<GeoPackage> tileSources = new HashSet<>();
+    private final Context mContext;
 
     public GeoPackageMapTileModuleProvider(File[] pFile,
                                            final Context context, IFilesystemCache cache) {
         //int pThreadPoolSize, final int pPendingQueueSize
         super(Configuration.getInstance().getTileFileSystemThreads(), Configuration.getInstance().getTileFileSystemMaxQueueSize());
+        mContext = context;
         Log.i(IMapView.LOGTAG, "Geopackage support is BETA. Please report any issues");
         tileWriter = cache;
         // Get a manager
@@ -101,7 +103,7 @@ public class GeoPackageMapTileModuleProvider extends MapTileModuleProviderBase {
                 opt.outHeight = 256; //360
                 opt.outWidth = 256;//248
                 Bitmap imageBitmap = BitmapFactory.decodeByteArray(image, 0, image.length, opt);
-                tile = new BitmapDrawable(imageBitmap);
+                tile = new BitmapDrawable(mContext.getResources(), imageBitmap);
 
             }
         }

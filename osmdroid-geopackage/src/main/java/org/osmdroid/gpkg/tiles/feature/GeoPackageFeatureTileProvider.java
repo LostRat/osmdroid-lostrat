@@ -1,5 +1,6 @@
 package org.osmdroid.gpkg.tiles.feature;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -27,9 +28,11 @@ public class GeoPackageFeatureTileProvider extends MapTileProviderBase {
     protected IFilesystemCache tileWriter;
     protected int minzoom = 0;
     protected FeatureTiles featureTiles = null;
+    private final Context mContext;
 
-    public GeoPackageFeatureTileProvider(ITileSource pTileSource) {
+    public GeoPackageFeatureTileProvider(ITileSource pTileSource, Context context) {
         super(pTileSource);
+        mContext = context;
 
         Log.i(IMapView.LOGTAG, "Geopackage support is BETA. Please report any issues");
         if (Build.VERSION.SDK_INT < 10) {
@@ -45,7 +48,7 @@ public class GeoPackageFeatureTileProvider extends MapTileProviderBase {
         if (featureTiles != null) {
             Bitmap tile = featureTiles.drawTile(MapTileIndex.getX(pMapTileIndex), MapTileIndex.getY(pMapTileIndex), MapTileIndex.getZoom(pMapTileIndex));
             if (tile != null) {
-                Drawable d = new BitmapDrawable(tile);
+                Drawable d = new BitmapDrawable(mContext.getResources(), tile);
                 return d;
             }
         }
