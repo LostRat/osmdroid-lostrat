@@ -10,7 +10,7 @@ android {
     namespace = 'org.osmdroid.shape'
     compileSdkVersion = findProperty('android.compileSdkVersion').toInteger()
     defaultConfig {
-        minSdkVersion 23
+        minSdk = 23
     }
 
     buildTypes {
@@ -26,12 +26,12 @@ android {
         }
     }
     lint {
-        abortOnError false
+        abortOnError = false
     }
 }
 
 dependencies {
-   
+
     testImplementation 'org.junit.vintage:junit-vintage-engine:5.13.4'
     api  project(':osmdroid-android')
     api 'com.github.spyhunter99:jdbf:2.2.4'

@@ -18,7 +18,7 @@ android {
 
         applicationId = "org.osmdroid"
 
-        minSdkVersion 23
+        minSdk = 23
         multiDexEnabled = true
 
         compileSdk = project.hasProperty('android.compileSdkVersion')
@@ -29,11 +29,11 @@ android {
                 ? Integer.parseInt(project.property('android.targetSdkVersion')) : 34)
 
         // default versionCode o 1 if not provided
-        versionCode(project.hasProperty('android.versionCode')
+        versionCode = (project.hasProperty('android.versionCode')
                 ? Integer.parseInt(project.property('android.versionCode')) : 1)
 
-        versionName project.version
-        
+        versionName = project.version
+
         // 16KB page size compatibility settings
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
@@ -59,13 +59,13 @@ android {
             useLegacyPackaging = false
         }
     }
-    
+
     // Additional configuration for 16KB page size compatibility
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    
+
     // Modern 16KB alignment for AGP 8.1+
     bundle {
         language {
@@ -78,17 +78,17 @@ android {
             enableSplit = false
         }
     }
-    
+
 
 
     buildFeatures {
         buildConfig = true
     }
     lint {
-        abortOnError false
-        disable 'NonConstantResourceId'
+        abortOnError = false
+        disable += 'NonConstantResourceId'
     }
-    
+
 
 
 }
@@ -168,7 +168,7 @@ dependencies {
         exclude group: 'com.google.android.gms'
         exclude group: 'com.google.maps.android'
         exclude group: 'com.android.support', module: 'support-v13'
-        
+
         // Exclude the problematic SQLite library for 16KB compatibility
         exclude group: 'io.requery', module: 'sqlite-android'
         exclude module: 'sqlite-android'
@@ -176,7 +176,7 @@ dependencies {
         // *** IMPORTANT: Make sure this exclude is REMOVED here too ***
         // exclude group: 'com.j256.ormlite'
     }
-    
+
     // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
     implementation 'androidx.sqlite:sqlite:2.6.1'
     implementation 'androidx.sqlite:sqlite-framework:2.6.1'
@@ -190,7 +190,7 @@ configurations.all {
         force "androidx.lifecycle:lifecycle-livedata:2.6.2"
         force "androidx.lifecycle:lifecycle-runtime:2.6.2"
         force "androidx.lifecycle:lifecycle-viewmodel:2.6.2"
-        
+
         // Force use of system SQLite for 16KB compatibility
         force 'androidx.sqlite:sqlite:2.4.0'
         force 'androidx.sqlite:sqlite-framework:2.4.0'

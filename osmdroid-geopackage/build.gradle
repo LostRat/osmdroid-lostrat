@@ -11,7 +11,7 @@ android {
     compileSdkVersion = findProperty('android.compileSdkVersion').toInteger()
 
     defaultConfig {
-        minSdkVersion 23
+        minSdk = 23
     }
     buildTypes {
         release {
@@ -49,11 +49,11 @@ dependencies {
         exclude group: 'com.google.android.gms'
         exclude group: 'com.google.maps.android'
         exclude group: 'com.android.support',module: 'support-v13'
-        
+
         // Exclude the problematic SQLite library for 16KB compatibility
         exclude group: 'io.requery', module: 'sqlite-android'
         exclude module: 'sqlite-android'
-        
+
 //        exclude group: 'org.osmdroid.gpkg'
 //        exclude module: 'ormlite-core'
 //        exclude group: 'com.j256.ormlite'

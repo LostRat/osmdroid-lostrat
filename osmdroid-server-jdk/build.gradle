@@ -6,7 +6,9 @@ apply plugin: 'war'
 
 group = project.property("pom.groupId")
 version =  project.property("pom.version")
-mainClassName = "org.osmdroid.server.jdk.TileServer"
+application {
+    mainClass = "org.osmdroid.server.jdk.TileServer"
+}
 
 war {
     from('www') {

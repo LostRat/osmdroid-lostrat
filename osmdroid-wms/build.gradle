@@ -12,7 +12,7 @@ android {
         unitTests.returnDefaultValues = true
     }
     defaultConfig {
-        minSdkVersion 23
+        minSdk = 23
     }
     buildTypes {
         release {
@@ -27,7 +27,7 @@ android {
         }
     }
     lint {
-        abortOnError false
+        abortOnError = false
     }
 }
 
