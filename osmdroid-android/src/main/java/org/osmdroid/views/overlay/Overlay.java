@@ -132,6 +132,47 @@ public abstract class Overlay implements OverlayConstants {
         return this.mInteractive;
     }
 
+    // ===========================================================
+    // Hierarchy / Parent Tracking (Task 3 Fix)
+    // ===========================================================
+
+    private Overlay mParent;
+
+    /**
+     * Sets the parent overlay of this overlay.
+     * Used for hierarchy tracking in FolderOverlays.
+     * @since 6.4.0
+     */
+    public void setParent(Overlay parent) {
+        this.mParent = parent;
+    }
+
+    /**
+     * @return The parent overlay, or null if this is a root overlay.
+     * @since 6.4.0
+     */
+    public Overlay getParent() {
+        return mParent;
+    }
+
+    /**
+     * Checks if this overlay and all its parents are enabled.
+     * This ensures that disabling a FolderOverlay effectively disables all its children,
+     * even if the children themselves are still marked as "enabled".
+     *
+     * @return true if this overlay is enabled AND all its ancestors are enabled.
+     * @since 6.4.0
+     */
+    public boolean isHierarchyEnabled() {
+        if (!isEnabled()) {
+            return false;
+        }
+        if (mParent != null) {
+            return mParent.isHierarchyEnabled();
+        }
+        return true;
+    }
+
     /**
      * Since the menu-chain will pass through several independent Overlays, menu IDs cannot be fixed
      * at compile time. Overlays should use this method to obtain and store a menu id for each menu

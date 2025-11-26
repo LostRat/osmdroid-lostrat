@@ -290,7 +290,9 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             if (layerOverlays == null) continue;
 
             for (final Overlay overlay : layerOverlays) {
-                if (overlay != null && overlay.isEnabled()) {
+                // ENHANCED FIX: Check hierarchy visibility (Task 3)
+                // If this overlay or any of its parents are disabled, skip drawing
+                if (overlay != null && overlay.isHierarchyEnabled()) {
                     if (pMapView != null) {
                         overlay.draw(c, pMapView, false);
                     } else {
@@ -463,7 +465,8 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
                     final Overlay overlay = layerOverlays.get(i);
 
                     // Skip non-interactive overlays for performance
-                    if (overlay == null || !overlay.isEnabled() || !overlay.isInteractive()) {
+                    // ENHANCED FIX: Check hierarchy visibility (Task 3)
+                    if (overlay == null || !overlay.isHierarchyEnabled() || !overlay.isInteractive()) {
                         continue;
                     }
 
@@ -741,6 +744,22 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             return;
         }
 
+        // ENHANCED FIX: Recursive assignment for FolderOverlays (Task 3)
+        if (overlay instanceof FolderOverlay) {
+            FolderOverlay folder = (FolderOverlay) overlay;
+            List<Overlay> children = folder.getItems();
+            if (children != null) {
+                for (Overlay child : children) {
+                    assignOverlayToLayer(child);
+                }
+            }
+            // Do NOT assign the folder itself to a layer if it's just a container
+            // However, if we want to support drawing the folder itself (e.g. for debug bounds),
+            // we might need to, but for now, we assume folders are just containers.
+            // If we don't assign it, it won't be drawn by drawWithLayers, which is what we want.
+            return;
+        }
+
         OverlayLayer layer = determineOverlayLayer(overlay);
         assignOverlayToLayer(overlay, layer);
     }
@@ -795,6 +814,17 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             // Fallback: remove from all layers if not tracked
             for (List<Overlay> layerList : mLayeredOverlays.values()) {
                 layerList.remove(overlay);
+            }
+        }
+
+        // ENHANCED FIX: Recursive removal for FolderOverlays (Task 3)
+        if (overlay instanceof FolderOverlay) {
+            FolderOverlay folder = (FolderOverlay) overlay;
+            List<Overlay> children = folder.getItems();
+            if (children != null) {
+                for (Overlay child : children) {
+                    removeOverlayFromLayer(child);
+                }
             }
         }
     }

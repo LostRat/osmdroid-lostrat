@@ -64,7 +64,9 @@ public class FolderOverlay extends Overlay {
     }
 
     public boolean add(Overlay item) {
-
+        if (item != null) {
+            item.setParent(this);
+        }
         boolean b = mOverlayManager.add(item);
         if (b) recalculateBounds();
         return b;
