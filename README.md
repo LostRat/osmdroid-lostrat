@@ -18,12 +18,26 @@ Will try to use JitPack to make it possible to include this as a dependency in y
 
 Otherwise you can use: `gradlew clean build publishToMavenLocal` then for example:
 
+
+November 26. 2025 note:
+
+I believe this version represents today's snapshot:
 ```groovy
-implementation("com.github.lostrat:osmdroid-android:6.1.22-lostrat-SNAPSHOT")
-implementation("com.github.lostrat:osmdroid-mapsforge:6.1.22-lostrat-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:6.1.22-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:6.1.22-lostrat")
 ```
 
-Or include a cloned folder inside your `settings.gradle` file: `includeBuild 'your/clone/path'`
+(The JitPack build failed because I failed to git add a new file. I did a git "amend" to add it but that did not yet trigger a re build.)
+
+// New development version
+```groovy
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.0-lostrat-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.0-lostrat-SNAPSHOT")
+```
+
+If you clone the repo you could then go back to an earlier commit before my AI aided changes from August 2025 forward. I think my ample use of markdown files at root might be useful to someone.
+
+You can include a cloned OSMDroid folder inside your `settings.gradle` file: `includeBuild 'your/clone/path'`
 
 **Note:** once upon a time this `includeBuild` method had worked for me for MapsForge
 
