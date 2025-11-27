@@ -123,7 +123,7 @@ dependencies {
     implementation project(':osmdroid-shape')
 
     //mil-sym-android-renderer brings in a conflicting version of androidsvg
-    implementation('io.github.missioncommand:mil-sym-android-renderer:0.2.1') {
+    implementation('io.github.missioncommand:mil-sym-android-renderer:0.2.2') {
         exclude group: 'com.caverock', module: 'androidsvg-aar'
     }
 
@@ -161,7 +161,7 @@ dependencies {
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:1.9.0"
 
 
-    implementation("mil.nga.geopackage:geopackage-android:6.7.4") {
+    implementation("mil.nga.geopackage:geopackage-android:6.7.5") {
         // It's good practice to repeat the excludes here if you repeated them
         // in the osmdroid-geopackage module, for consistency and to ensure
         // only what you need is included.
@@ -178,8 +178,8 @@ dependencies {
     }
 
     // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
-    implementation 'androidx.sqlite:sqlite:2.6.1'
-    implementation 'androidx.sqlite:sqlite-framework:2.6.1'
+    implementation 'androidx.sqlite:sqlite:2.6.2'
+    implementation 'androidx.sqlite:sqlite-framework:2.6.2'
 
 
 
