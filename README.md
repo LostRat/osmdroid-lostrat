@@ -19,20 +19,33 @@ Will try to use JitPack to make it possible to include this as a dependency in y
 Otherwise you can use: `gradlew clean build publishToMavenLocal` then for example:
 
 
-November 26. 2025 note:
+November 27. 2025 note:
 
-I believe this version represents today's snapshot:
+This version represents today's snapshot. This was able to sync in my test app in Android Studio:
+The "v7.0.0-lostrat" part is based on a git tag that is set for a specific commit.
 ```groovy
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:6.1.22-lostrat")
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:6.1.22-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.0-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.0-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.0-lostrat")
 ```
 
-(The JitPack build failed because I failed to git add a new file. I did a git "amend" to add it but that did not yet trigger a re build.)
+The JitPack build notes includes:
+```text
+✅ Build artifacts:
+com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-server-jdk:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-shape:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:OSMMapTilePackager:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.0-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-wms:v7.0.0-lostrat
+```
+
 
 // New development version
 ```groovy
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.0-lostrat-SNAPSHOT")
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.0-lostrat-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.1-lostrat-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.1-lostrat-SNAPSHOT")
 ```
 
 If you clone the repo you could then go back to an earlier commit before my AI aided changes from August 2025 forward. I think my ample use of markdown files at root might be useful to someone.
