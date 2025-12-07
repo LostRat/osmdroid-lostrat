@@ -484,20 +484,11 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
                 // For background layers, use adaptive search optimization
                 List<Overlay> nearbyOverlays = getNearbyOverlaysInLayer(e, pMapView, layer);
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && nearbyOverlays.size() > 10) {
-                    // API 24+: Use parallel streams for many overlays
-                    if (nearbyOverlays.parallelStream()
-                        .filter(overlay -> overlay != null && overlay.isInteractive())
-                        .anyMatch(overlay -> overlay.onSingleTapConfirmed(e, pMapView))) {
+                // Sequential processing in reverse order (last added first)
+                for (int i = nearbyOverlays.size() - 1; i >= 0; i--) {
+                    final Overlay overlay = nearbyOverlays.get(i);
+                    if (overlay != null && overlay.isInteractive() && overlay.onSingleTapConfirmed(e, pMapView)) {
                         return true;
-                    }
-                } else {
-                    // Sequential processing in reverse order (last added first)
-                    for (int i = nearbyOverlays.size() - 1; i >= 0; i--) {
-                        final Overlay overlay = nearbyOverlays.get(i);
-                        if (overlay != null && overlay.isInteractive() && overlay.onSingleTapConfirmed(e, pMapView)) {
-                            return true;
-                        }
                     }
                 }
             }
@@ -514,17 +505,11 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         // Use adaptive search strategy to get optimal overlay list
         List<Overlay> overlaysForTap = getOverlaysForTap(e, pMapView);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && overlaysForTap.size() > 10) {
-            // API 24+: Use parallel streams for many overlays
-            return overlaysForTap.parallelStream()
-                .filter(overlay -> overlay.isInteractive())
-                .anyMatch(overlay -> overlay.onSingleTapConfirmed(e, pMapView));
-        } else {
-            // Sequential processing for fewer overlays or older APIs
-            for (final Overlay overlay : overlaysForTap) {
-                if (overlay.isInteractive() && overlay.onSingleTapConfirmed(e, pMapView)) {
-                    return true;
-                }
+        // Sequential processing in reverse order (last added first)
+        for (int i = overlaysForTap.size() - 1; i >= 0; i--) {
+            final Overlay overlay = overlaysForTap.get(i);
+            if (overlay.isInteractive() && overlay.onSingleTapConfirmed(e, pMapView)) {
+                return true;
             }
         }
 
@@ -687,19 +672,10 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         mVisibleOverlays.clear();
         BoundingBox viewport = mapView.getProjection().getBoundingBox();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && mOverlayList.size() > 50) {
-            // API 24+: Use parallel streams for large overlay collections
-            mVisibleOverlays.addAll(
-                mOverlayList.parallelStream()
-                    .filter(overlay -> isOverlayVisible(overlay, viewport))
-                    .collect(Collectors.toList())
-            );
-        } else {
-            // Sequential processing for smaller collections or older APIs
-            for (Overlay overlay : mOverlayList) {
-                if (isOverlayVisible(overlay, viewport)) {
-                    mVisibleOverlays.add(overlay);
-                }
+        // Sequential processing for all collections
+        for (Overlay overlay : mOverlayList) {
+            if (isOverlayVisible(overlay, viewport)) {
+                mVisibleOverlays.add(overlay);
             }
         }
     }
