@@ -451,90 +451,44 @@ public class BoundingBox implements Parcelable, Serializable {
      * @return
      */
     public boolean overlaps(final BoundingBox pBoundingBox, double pZoom) {
+      // Early exit hack for low zoom levels
+      if (pZoom < 3) return true;
 
-        //FIXME this is a total hack but it works around a number of issues related to vertical map
-        //replication and horiztonal replication that can cause polygons to completely disappear when
-        //panning
-        if (pZoom < 3)
-            return true;
+      // Check latitude overlap (straightforward, no wrapping)
+      boolean latOverlap = mLatSouth <= pBoundingBox.mLatNorth &&
+        mLatNorth >= pBoundingBox.mLatSouth;
 
-        boolean latMatch = false;
-        boolean lonMatch = false;
+      if (!latOverlap) return false;
 
-        //vertical wrapping detection
-        if (pBoundingBox.mLatSouth <= mLatNorth &&
-                pBoundingBox.mLatSouth >= mLatSouth)
-            latMatch = true;
+      // Check longitude overlap with date line handling
+      boolean thisWraps = mLonWest > mLonEast;  // this box crosses date line
+      boolean thatWraps = pBoundingBox.mLonWest > pBoundingBox.mLonEast;
 
+      boolean lonOverlap;
 
-        //normal case, non overlapping
-        if (mLonWest >= pBoundingBox.mLonWest && mLonWest <= pBoundingBox.mLonEast)
-            lonMatch = true;
-        //normal case, non overlapping
-        if (mLonEast >= pBoundingBox.mLonWest && mLonWest <= pBoundingBox.mLonEast)
-            lonMatch = true;
+      if (!thisWraps && !thatWraps) {
+        // Standard case: neither crosses date line
+        lonOverlap = mLonWest <= pBoundingBox.mLonEast &&
+          mLonEast >= pBoundingBox.mLonWest;
+      } else if (thisWraps && thatWraps) {
+        // Both cross date line - they always overlap in longitude
+        lonOverlap = true;
+      } else if (thisWraps) {
+        // Only this box crosses date line
+        // This box spans: [mLonWest, 180] and [-180, mLonEast]
+        // Other box spans: [pBoundingBox.mLonWest, pBoundingBox.mLonEast]
+        // They overlap if other box intersects either segment
+        lonOverlap = pBoundingBox.mLonEast >= mLonWest ||  // touches western segment
+          pBoundingBox.mLonWest <= mLonEast;    // touches eastern segment
+      } else {
+        // Only other box crosses date line
+        // Other box spans: [pBoundingBox.mLonWest, 180] and [-180, pBoundingBox.mLonEast]
+        // This box spans: [mLonWest, mLonEast]
+        lonOverlap = mLonEast >= pBoundingBox.mLonWest ||  // touches western segment
+          mLonWest <= pBoundingBox.mLonEast;    // touches eastern segment
+      }
 
-        //special case for when *this completely surrounds the pBoundbox
-        if (mLonWest <= pBoundingBox.mLonWest &&
-                mLonEast >= pBoundingBox.mLonEast &&
-                mLatNorth >= pBoundingBox.mLatNorth &&
-                mLatSouth <= pBoundingBox.mLatSouth)
-            return true;
-
-        //normal case, non overlapping
-        if (mLatNorth >= pBoundingBox.mLatSouth && mLatNorth <= mLatSouth)
-            latMatch = true;
-        //normal case, non overlapping
-        if (mLatSouth >= pBoundingBox.mLatSouth && mLatSouth <= mLatSouth)
-            latMatch = true;
-
-        if (mLonWest > mLonEast) {
-            //the date line is included in the bounding box
-
-            //we want to match lon from the dateline to the eastern bounds of the box
-            //and the dateline to the western bounds of the box
-
-            if (mLonEast <= pBoundingBox.mLonEast && pBoundingBox.mLonWest >= mLonWest)
-                lonMatch = true;
-
-
-            if (mLonWest >= pBoundingBox.mLonEast &&
-                    mLonEast <= pBoundingBox.mLonEast) {
-                lonMatch = true;
-                if (pBoundingBox.mLonEast < mLonWest &&
-                        pBoundingBox.mLonWest < mLonWest)
-                    lonMatch = false;
-
-                if (pBoundingBox.mLonEast > mLonEast &&
-                        pBoundingBox.mLonWest > mLonEast)
-                    lonMatch = false;
-            }
-            if (mLonWest >= pBoundingBox.mLonEast &&
-                    mLonEast >= pBoundingBox.mLonEast) {
-                lonMatch = true;
-
-            }
-			/*
-			//that is completely within this
-			if (mLonWest>= pBoundingBox.mLonEast &&
-				mLonEast<= pBoundingBox.mLonEast) {
-				lonMatch = true;
-				if (pBoundingBox.mLonEast < mLonWest &&
-					pBoundingBox.mLonWest < mLonWest)
-					lonMatch = false;
-
-				if (pBoundingBox.mLonEast > mLonEast &&
-					pBoundingBox.mLonWest > mLonEast )
-					lonMatch = false;
-			}
-			if (mLonWest>= pBoundingBox.mLonEast &&
-				mLonEast>= pBoundingBox.mLonEast) {
-				lonMatch = true;
-
-			}*/
-        }
-
-        return latMatch && lonMatch;
+      return lonOverlap;  // latOverlap already checked above
     }
 
     public static BoundingBox fromGeoPointsSafe(List<GeoPoint> points) {
