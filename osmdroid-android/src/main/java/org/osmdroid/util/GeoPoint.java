@@ -254,12 +254,10 @@ public class GeoPoint implements IGeoPoint, MathConstants, GeoConstants, Parcela
     public double distanceToAsDouble(final IGeoPoint other) {
         final double lat1 = DEG2RAD * getLatitude();
         final double lat2 = DEG2RAD * other.getLatitude();
-        final double lon1 = DEG2RAD * getLongitude();
-        final double lon2 = DEG2RAD * other.getLongitude();
 
-        // Pre-compute sin values to avoid Math.pow(x, 2)
-        final double halfDeltaLat = (lat2 - lat1) / 2;
-        final double halfDeltaLon = (lon2 - lon1) / 2;
+        // Convert deltas after subtracting to preserve precision for nearby coordinates.
+        final double halfDeltaLat = DEG2RAD * (other.getLatitude() - getLatitude()) / 2;
+        final double halfDeltaLon = DEG2RAD * (other.getLongitude() - getLongitude()) / 2;
         final double sinHalfDeltaLat = Math.sin(halfDeltaLat);
         final double sinHalfDeltaLon = Math.sin(halfDeltaLon);
 
