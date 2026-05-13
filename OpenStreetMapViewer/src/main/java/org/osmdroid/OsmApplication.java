@@ -8,8 +8,10 @@ import android.util.Log;
 import org.acra.ACRA;
 import org.acra.annotation.ReportsCrashes;
 import org.acra.collector.CrashReportData;
+import org.acra.config.ACRAConfiguration;
 import org.acra.sender.ReportSender;
 import org.acra.sender.ReportSenderException;
+import org.acra.sender.ReportSenderFactory;
 import org.osmdroid.config.Configuration;
 
 import java.io.File;
@@ -27,7 +29,10 @@ import androidx.multidex.MultiDexApplication;
  * Created by alex on 7/4/16.
  */
 
-@ReportsCrashes(formUri = "")
+@ReportsCrashes(
+        formUri = "",
+        reportSenderFactoryClasses = {OsmApplication.ErrorFileWriterFactory.class}
+)
 public class OsmApplication extends MultiDexApplication {
 
     @Override
@@ -103,7 +108,6 @@ public class OsmApplication extends MultiDexApplication {
         try {
             // Initialise ACRA
             ACRA.init(this);
-            ACRA.getErrorReporter().setReportSender(new ErrorFileWriter());
         } catch (Throwable t) {
             t.printStackTrace();
             //this can happen on androidx86 getExternalStorageDir is not writable or if there is a
@@ -138,6 +142,13 @@ public class OsmApplication extends MultiDexApplication {
     /**
      * Writes hard crash stack traces to a file on the SD card.
      */
+    public static class ErrorFileWriterFactory implements ReportSenderFactory {
+        @Override
+        public ReportSender create(Context context, ACRAConfiguration config) {
+            return new ErrorFileWriter();
+        }
+    }
+
     private static class ErrorFileWriter implements ReportSender {
 
         @Override
