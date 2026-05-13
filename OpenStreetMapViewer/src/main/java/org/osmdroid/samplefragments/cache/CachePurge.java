@@ -42,11 +42,9 @@ public class CachePurge extends BaseSampleFragment implements View.OnClickListen
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.btnCache:
-                new Thread(this).start();
-                break;
-
+        int id = v.getId();
+        if (id == R.id.btnCache) {
+            new Thread(this).start();
         }
     }
 

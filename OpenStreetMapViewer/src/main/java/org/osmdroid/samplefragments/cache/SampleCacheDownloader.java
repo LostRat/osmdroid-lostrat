@@ -70,15 +70,11 @@ public class SampleCacheDownloader extends BaseSampleFragment implements View.On
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.executeJob:
-                updateEstimate(true);
-                break;
-
-            case R.id.btnCache:
-                showCacheManagerDialog();
-                break;
-
+        int id = v.getId();
+        if (id == R.id.executeJob) {
+            updateEstimate(true);
+        } else if (id == R.id.btnCache) {
+            showCacheManagerDialog();
         }
     }
 

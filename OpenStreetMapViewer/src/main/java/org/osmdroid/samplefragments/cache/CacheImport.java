@@ -51,34 +51,31 @@ public class CacheImport extends BaseSampleFragment implements View.OnClickListe
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.btnCache:
+        int id = v.getId();
+        if (id == R.id.btnCache) {
 
-                DialogInterface.OnClickListener dialogClickListener = new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
+            DialogInterface.OnClickListener dialogClickListener = new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
 
-                        switch (which) {
-                            case DialogInterface.BUTTON_POSITIVE:
-                                //Yes button clicked
-                                break;
+                    switch (which) {
+                        case DialogInterface.BUTTON_POSITIVE:
+                            //Yes button clicked
+                            break;
 
-                            case DialogInterface.BUTTON_NEGATIVE:
-                                //No button clicked
-                                removeFromFileSystem = false;
-                                break;
-                        }
-                        new Thread(CacheImport.this).start();
-
+                        case DialogInterface.BUTTON_NEGATIVE:
+                            //No button clicked
+                            removeFromFileSystem = false;
+                            break;
                     }
-                };
+                    new Thread(CacheImport.this).start();
 
-                AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-                builder.setMessage("Would you like to remove the tiles from the file system after importing into the cache database?").setPositiveButton("Yes", dialogClickListener)
-                        .setNegativeButton("No", dialogClickListener).show();
+                }
+            };
 
-
-                break;
+            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+            builder.setMessage("Would you like to remove the tiles from the file system after importing into the cache database?").setPositiveButton("Yes", dialogClickListener)
+                    .setNegativeButton("No", dialogClickListener).show();
 
         }
     }

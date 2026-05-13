@@ -61,22 +61,17 @@ public class SampleRotation extends BaseSampleFragment implements View.OnClickLi
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.btnRotateLeft: {
-                float angle = mMapView.getMapOrientation() + 10;
-                if (angle > 360)
-                    angle = 360 - angle;
-                mMapView.setMapOrientation(angle);
-            }
-            break;
-            case R.id.btnRotateRight: {
-                float angle = mMapView.getMapOrientation() - 10;
-                if (angle < 0)
-                    angle += 360f;
-                mMapView.setMapOrientation(angle);
-            }
-            break;
-
+        int id = v.getId();
+        if (id == R.id.btnRotateLeft) {
+            float angle = mMapView.getMapOrientation() + 10;
+            if (angle > 360)
+                angle = 360 - angle;
+            mMapView.setMapOrientation(angle);
+        } else if (id == R.id.btnRotateRight) {
+            float angle = mMapView.getMapOrientation() - 10;
+            if (angle < 0)
+                angle += 360f;
+            mMapView.setMapOrientation(angle);
         }
         textViewCurrentLocation.setText(mMapView.getMapOrientation() + "");
     }

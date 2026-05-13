@@ -97,23 +97,19 @@ public class PressToPlot extends BaseSampleFragment implements View.OnClickListe
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-
-            case R.id.btnRotateLeft: {
-                float angle = mMapView.getMapOrientation() + 10;
-                if (angle > 360)
-                    angle = 360 - angle;
-                mMapView.setMapOrientation(angle);
-                updateInfo();
-            }
-            break;
-            case R.id.btnRotateRight: {
-                float angle = mMapView.getMapOrientation() - 10;
-                if (angle < 0)
-                    angle += 360f;
-                mMapView.setMapOrientation(angle);
-                updateInfo();
-            }
+        int id = v.getId();
+        if (id == R.id.btnRotateLeft) {
+            float angle = mMapView.getMapOrientation() + 10;
+            if (angle > 360)
+                angle = 360 - angle;
+            mMapView.setMapOrientation(angle);
+            updateInfo();
+        } else if (id == R.id.btnRotateRight) {
+            float angle = mMapView.getMapOrientation() - 10;
+            if (angle < 0)
+                angle += 360f;
+            mMapView.setMapOrientation(angle);
+            updateInfo();
         }
     }
 

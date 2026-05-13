@@ -89,13 +89,11 @@ public class StoragePreferenceFragment extends Fragment implements View.OnClickL
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.buttonManualCacheEntry:
-                showManualEntry();
-                break;
-            case R.id.buttonSetCache:
-                showPickCacheFromList();
-                break;
+        int id = v.getId();
+        if (id == R.id.buttonManualCacheEntry) {
+            showManualEntry();
+        } else if (id == R.id.buttonSetCache) {
+            showPickCacheFromList();
         }
     }
 

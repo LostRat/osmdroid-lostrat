@@ -69,15 +69,11 @@ public class SampleCacheDelete extends BaseSampleFragment implements View.OnClic
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.executeJob:
-                updateEstimate(true);
-                break;
-
-            case R.id.btnCache:
-                showCacheManagerDialog();
-                break;
-
+        int id = v.getId();
+        if (id == R.id.executeJob) {
+            updateEstimate(true);
+        } else if (id == R.id.btnCache) {
+            showCacheManagerDialog();
         }
     }
 
