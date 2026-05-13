@@ -1,7 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext.kotlin_version = '1.8.22'
+    ext.kotlin_version = '2.3.0'
     repositories {
         google()
         mavenCentral()
@@ -21,11 +21,11 @@ buildscript {
 
 // Set up the spotbugs plugin so we can apply it in a quality pass if needed
 plugins {
-    id  'com.github.spotbugs' version '6.2.3' apply false
+    id  'com.github.spotbugs' version '6.5.4' apply false
 }
 
 allprojects {
-    
+
     // NOTE: project.group and project.version must be defined before including
     // maven-support.gradle since it uses these values...
     project.group = ( project.hasProperty('pom.groupId')
@@ -42,11 +42,11 @@ allprojects {
         }
     }
 
-    
+
 
     tasks.withType(JavaCompile) {
         options.encoding = "UTF-8"
-//        options.compilerArgs += ["-Xlint:unchecked", "-Xlint:deprecation"]
+        options.compilerArgs += ["-Xlint:unchecked", "-Xlint:deprecation"]
     }
 
 
