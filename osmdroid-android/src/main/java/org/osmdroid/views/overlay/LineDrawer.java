@@ -18,6 +18,9 @@ public class LineDrawer extends LineBuilder {
     private IntegerAccepter mIntegerAccepter;
     private Canvas mCanvas;
     private PaintList mPaintList;
+    // F5: avoid allocating a new wrapper every frame when the Paint is unchanged.
+    private Paint mCachedPaint;
+    private MonochromaticPaintList mCachedPaintList;
 
     public LineDrawer(int pMaxSize) {
         super(pMaxSize);
@@ -28,7 +31,11 @@ public class LineDrawer extends LineBuilder {
     }
 
     public void setPaint(final Paint pPaint) {
-        setPaint(new MonochromaticPaintList(pPaint));
+        if (pPaint != mCachedPaint) {
+            mCachedPaint = pPaint;
+            mCachedPaintList = new MonochromaticPaintList(pPaint);
+        }
+        setPaint(mCachedPaintList);
     }
 
     public void setPaint(final PaintList pPaintList) {

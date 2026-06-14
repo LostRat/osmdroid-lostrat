@@ -282,11 +282,32 @@ public abstract class PolyOverlayWithIW extends OverlayWithIW {
         final double distanceBetweenCenters = Math.sqrt(Distance.getSquaredDistanceToPoint(
                 mVisibilityRectangleCenter.x, mVisibilityRectangleCenter.y,
                 screenCenterX, screenCenterY));
-        final double screenRadius = Math.sqrt(Distance.getSquaredDistanceToPoint(
-                0, 0,
-                screenCenterX, screenCenterY));
+        final double screenRadius = getScreenRadius(pProjection);
 
         return distanceBetweenCenters <= radius + screenRadius;
+    }
+
+    /**
+     * @since 6.2.0 (LostRat F6)
+     * The screen radius depends only on the projection dimensions, which are constant
+     * across every overlay drawn in a single frame. Cache it so we don't recompute the
+     * same Math.sqrt once per polyline. Keyed on width/height so it stays correct across
+     * rotations, resizes, or multiple MapViews of different sizes.
+     */
+    private static int sScreenRadiusWidth = -1;
+    private static int sScreenRadiusHeight = -1;
+    private static double sScreenRadius;
+
+    private static double getScreenRadius(final Projection pProjection) {
+        final int width = pProjection.getWidth();
+        final int height = pProjection.getHeight();
+        if (width != sScreenRadiusWidth || height != sScreenRadiusHeight) {
+            sScreenRadiusWidth = width;
+            sScreenRadiusHeight = height;
+            sScreenRadius = Math.sqrt(Distance.getSquaredDistanceToPoint(
+                    0, 0, width / 2, height / 2));
+        }
+        return sScreenRadius;
     }
 
     private void drawWithPath(final Canvas pCanvas, final Projection pProjection) {

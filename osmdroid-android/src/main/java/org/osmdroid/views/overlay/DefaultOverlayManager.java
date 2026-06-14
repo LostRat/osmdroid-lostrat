@@ -86,6 +86,14 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
         }
     }
 
+    // F1: the layer draw order never changes at runtime, so sort the fixed enum
+    // once at class-load time instead of allocating + sorting an array every frame.
+    private static final OverlayLayer[] SORTED_LAYERS;
+    static {
+        SORTED_LAYERS = OverlayLayer.values();
+        Arrays.sort(SORTED_LAYERS, (a, b) -> Integer.compare(a.getZIndex(), b.getZIndex()));
+    }
+
     private final Map<OverlayLayer, List<Overlay>> mLayeredOverlays = new ConcurrentHashMap<>();
     private final Map<Overlay, OverlayLayer> mOverlayToLayer = new ConcurrentHashMap<>();
     private boolean mUseLayerSystem = true;
@@ -281,11 +289,8 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
      * @since Enhanced layer system
      */
     private void drawWithLayers(final Canvas c, final MapView pMapView, final Projection pProjection) {
-        // Draw layers from lowest to highest z-index
-        OverlayLayer[] layers = OverlayLayer.values();
-        Arrays.sort(layers, (a, b) -> Integer.compare(a.getZIndex(), b.getZIndex()));
-
-        for (OverlayLayer layer : layers) {
+        // Draw layers from lowest to highest z-index (order precomputed once, see SORTED_LAYERS)
+        for (OverlayLayer layer : SORTED_LAYERS) {
             List<Overlay> layerOverlays = mLayeredOverlays.get(layer);
             if (layerOverlays == null) continue;
 

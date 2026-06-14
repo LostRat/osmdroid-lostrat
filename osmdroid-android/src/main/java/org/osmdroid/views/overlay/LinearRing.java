@@ -54,6 +54,11 @@ public class LinearRing {
     private double[] mDistances;
     private long[] mProjectedPoints;
     private final PointL mProjectedCenter = new PointL();
+    // F2/F3: reused scratch points so the per-draw hot path allocates nothing.
+    private final PointL mClipProjected = new PointL();
+    private final PointL mClipPoint = new PointL();
+    private final PointL mClipFirst = new PointL();
+    private final PointL mBuildOffset = new PointL();
     private final SegmentClipper mSegmentClipper = new SegmentClipper();
     private final Path mPath;
     private final BoundingBox mBoundingBox = new BoundingBox();
@@ -248,7 +253,9 @@ public class LinearRing {
         if (pOffset != null) {
             offset = pOffset;
         } else {
-            offset = new PointL();
+            // F3 (extended): reuse the shared scratch field instead of allocating per draw.
+            offset = mBuildOffset;
+            offset.set(0, 0);
             getBestOffset(pProjection, offset);
         }
         mSegmentClipper.init();
@@ -273,7 +280,8 @@ public class LinearRing {
         }
         computeProjected();
         computeDistances();
-        final PointL offset = new PointL();
+        final PointL offset = mBuildOffset;
+        offset.set(0, 0);
         getBestOffset(pProjection, offset);
         mSegmentClipper.init();
         clipAndStore(pProjection, offset, mClosed, pStorePoints, mSegmentClipper);
@@ -374,9 +382,9 @@ public class LinearRing {
                               final SegmentClipper pSegmentClipper) {
         mPointsForMilestones.clear();
         final double powerDifference = pProjection.getProjectedPowerDifference();
-        final PointL projected = new PointL();
-        final PointL point = new PointL();
-        final PointL first = new PointL();
+        final PointL projected = mClipProjected;
+        final PointL point = mClipPoint;
+        final PointL first = mClipFirst;
         for (int i = 0; i < mProjectedPoints.length; i += 2) {
             projected.set(mProjectedPoints[i], mProjectedPoints[i + 1]);
             pProjection.getLongPixelsFromProjected(projected, powerDifference, false, point);
