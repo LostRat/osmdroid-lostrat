@@ -34,7 +34,7 @@ import java.io.InputStream;
 
 /**
  * Adapted from code from here: https://github.com/MKergall/osmbonuspack, which is LGPL
- * Updated for Mapsforge 0.25.0
+ * Updated for Mapsforge 0.28.0
  */
 public class MapsForgeTileSource extends BitmapTileSourceBase {
 
@@ -100,13 +100,13 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
                 AndroidGraphicFactory.INSTANCE // GraphicFactory graphicFactory
         );
 
-        // Create the DirectRenderer with the new constructor signature
         renderer = new DirectRenderer(
-                mapDatabase,                    // MapDataStore mapDataStore
-                AndroidGraphicFactory.INSTANCE, // GraphicFactory graphicFactory
-                labelStore,                     // MapDataStoreLabelStore labelStore
-                true,                          // boolean renderLabels
-                hillsRenderConfig              // HillsRenderConfig hillsRenderConfig
+                mapDatabase,
+                AndroidGraphicFactory.INSTANCE,
+                labelStore,
+                true,   // renderLabels
+                false,  // cacheLabels
+                hillsRenderConfig
         );
 
         minZoom = MIN_ZOOM;
@@ -116,7 +116,7 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
     }
 
     /**
-     * Load default theme from assets using StreamRenderTheme (0.25.0 approach)
+     * Load default theme from assets using StreamRenderTheme
      */
     private XmlRenderTheme loadDefaultThemeFromAssets() {
         if (sAssetManager == null) {
