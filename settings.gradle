@@ -1,3 +1,12 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        mavenLocal()
+    }
+}
+
 rootProject.name = 'osmdroid-lostrat'
 
 //this is the normal settings.gradle file for osmdroid, which defines which modules are included
@@ -24,7 +33,13 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         mavenLocal()
-        maven { url = "https://oss.sonatype.org/content/repositories/snapshots" }
+        maven {
+            url = "https://oss.sonatype.org/content/repositories/snapshots"
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
+        maven { url = uri("https://jitpack.io") }   // <-- add this
     }
 }
 

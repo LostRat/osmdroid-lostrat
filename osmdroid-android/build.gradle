@@ -39,9 +39,9 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core:1.16.0'
+    implementation 'androidx.core:core:1.19.0'
     implementation 'androidx.preference:preference:1.2.1'
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${project.property('junit.version')}"
     testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
     testImplementation "org.robolectric:robolectric:${project.property('robolectric.version')}"
 }
@@ -117,9 +117,9 @@ afterEvaluate {
 
                     licenses {
                         license {
-                            name=project.property("pom.licenses.license.0.name");
-                            url=project.property("pom.licenses.license.0.url");
-                            distribution==project.property("pom.licenses.license.0.distribution");
+                            name=project.property("pom.licenses.license.0.name")
+                            url=project.property("pom.licenses.license.0.url")
+                            distribution==project.property("pom.licenses.license.0.distribution")
                         }
 
                     }
@@ -132,15 +132,6 @@ afterEvaluate {
 }
 
 
-tasks.register('androidSourcesJar', Jar) {
-    from android.sourceSets.main.java.srcDirs
-}
-
-artifacts {
-//    archives packageReleaseJar
-    archives androidSourcesJar
-
-}
 clean.dependsOn(copyFiles)
 build.dependsOn(copyFiles)
 copyFiles.dependsOn(cleanCustomFiles)

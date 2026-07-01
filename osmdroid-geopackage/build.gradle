@@ -42,10 +42,10 @@ dependencies {
     //crash logging
     //implementation 'ch.acra:acra:4.7.0'
 
-    testImplementation 'org.junit.vintage:junit-vintage-engine:5.13.4'
+    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
 
     api  project(':osmdroid-android')
-    implementation ("mil.nga.geopackage:geopackage-android:6.7.4"){
+    implementation ("mil.nga.geopackage:geopackage-android:6.7.5"){
         exclude group: 'com.google.android.gms'
         exclude group: 'com.google.maps.android'
         exclude group: 'com.android.support',module: 'support-v13'
@@ -62,16 +62,6 @@ dependencies {
 //    api 'mil.nga.geopackage:geopackage-core:6.6.7'
 //    api 'ar.com.hjg:pngj:2.1.0'
 //    api 'mil.nga:tiff:3.0.0'
-}
-
-tasks.register('androidSourcesJar', Jar) {
-    from android.sourceSets.main.java.srcDirs
-}
-
-artifacts {
-//    archives packageReleaseJar
-    archives androidSourcesJar
-
 }
 
 afterEvaluate {

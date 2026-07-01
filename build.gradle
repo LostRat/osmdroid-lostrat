@@ -10,7 +10,12 @@ buildscript {
             url = 'https://maven.google.com/'
             name = 'Google'
         }
-        maven { url = "https://oss.sonatype.org/content/repositories/snapshots" }
+        maven {
+            url = "https://oss.sonatype.org/content/repositories/snapshots"
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
         maven { url = "https://repo.maven.apache.org/maven2" }
     }
     dependencies {
@@ -21,7 +26,7 @@ buildscript {
 
 // Set up the spotbugs plugin so we can apply it in a quality pass if needed
 plugins {
-    id  'com.github.spotbugs' version '6.5.4' apply false
+    id  'com.github.spotbugs' version '6.5.8' apply false
 }
 
 allprojects {
@@ -36,17 +41,18 @@ allprojects {
 
     // forces all changing dependencies (i.e. SNAPSHOTs) to automagicially download
     // (thanks, @BillBarnhill!)
-    configurations.all {
+    configurations.configureEach {
         resolutionStrategy {
             cacheChangingModulesFor 0, 'seconds'
         }
     }
 
 
-
-    tasks.withType(JavaCompile) {
-        options.encoding = "UTF-8"
-        options.compilerArgs += ["-Xlint:unchecked", "-Xlint:deprecation"]
+    tasks.withType(JavaCompile).tap {
+        configureEach {
+            options.encoding = "UTF-8"
+            options.compilerArgs += ["-Xlint:unchecked", "-Xlint:deprecation"]
+        }
     }
 
 

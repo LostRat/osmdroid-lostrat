@@ -19,7 +19,6 @@ android {
         applicationId = "org.osmdroid"
 
         minSdk = 23
-        multiDexEnabled = true
 
         compileSdk = project.hasProperty('android.compileSdkVersion')
                 ? Integer.parseInt(project.property('android.compileSdkVersion')) : 35
@@ -91,8 +90,46 @@ android {
 
 
 
+    //the following sets the required permissions for API 23+ devices and AVDs
+    //
+    // NOTE: applicationVariants was removed in AGP 9.x.
+    // These permission-granting tasks use androidComponents.onVariants instead.
+    // They register adb grant tasks for debug builds only.
 }
 
+// AGP 9.x replacement for applicationVariants.all: grant permissions for debug builds.
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        def variantName = variant.name.capitalize()
+        def appId = variant.applicationId.get()
+        def installTaskName = "install${variantName}"
+        def adbPath = sdkComponents.adb.get().asFile.absolutePath
+
+        def grantLocationTask = tasks.register("configDevice${variantName}", Exec) {
+            group = 'nameofyourtaskgroup'
+            description = 'Grant ACCESS_FINE_LOCATION permission on device.'
+
+            dependsOn installTaskName
+            commandLine adbPath, "shell", "pm", "grant", "$appId", "android.permission.ACCESS_FINE_LOCATION"
+        }
+
+        def grantStorageTask = tasks.register("configDevice2${variantName}", Exec) {
+            group = 'nameofyourtaskgroup'
+            description = 'Grant WRITE_EXTERNAL_STORAGE permission on device.'
+
+            dependsOn installTaskName
+            commandLine adbPath, "shell", "pm", "grant", "$appId", "android.permission.WRITE_EXTERNAL_STORAGE"
+        }
+
+        def connectedTestTaskName = "connected${variantName}AndroidTest"
+        tasks.configureEach { task ->
+            if (task.name == connectedTestTaskName) {
+                task.dependsOn grantLocationTask
+                task.dependsOn grantStorageTask
+            }
+        }
+    }
+}
 
 dependencies {
     //apparently google or gradle changed something so that
@@ -100,9 +137,15 @@ dependencies {
     //are not longer resolved...
 
     //osmdroid-mapsforge
-    implementation 'org.mapsforge:mapsforge-map-android:0.25.0'
-    implementation 'org.mapsforge:mapsforge-map:0.25.0'
-    implementation 'org.mapsforge:mapsforge-themes:0.25.0'
+//    implementation 'org.mapsforge:mapsforge-map-android:0.25.0'
+//    implementation 'org.mapsforge:mapsforge-map:0.25.0'
+//    implementation 'org.mapsforge:mapsforge-themes:0.25.0'
+
+
+    // Explicitly pull the 0.28.0 variations via JitPack to override defaults
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.28.0'
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-map:0.28.0'
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-themes:0.28.0'
 
     // Exclude androidsvg JAR from mapsforge-map-android
 //    implementation('org.mapsforge:mapsforge-map-android:0.21.0') {
@@ -123,7 +166,7 @@ dependencies {
     implementation project(':osmdroid-shape')
 
     //mil-sym-android-renderer brings in a conflicting version of androidsvg
-    implementation('io.github.missioncommand:mil-sym-android-renderer:0.2.2') {
+    implementation('io.github.missioncommand:mil-sym-android-renderer:0.2.5') {
         exclude group: 'com.caverock', module: 'androidsvg-aar'
     }
 
@@ -133,13 +176,12 @@ dependencies {
     implementation 'com.github.angads25:filepicker:1.1.1'
 
     //used for bookmark demo
-    implementation group: 'com.opencsv', name: 'opencsv', version: '5.12.0'
+    implementation 'com.opencsv:opencsv:5.12.0'
 
     //usual android stuff
-    implementation "com.google.android.material:material:1.13.0" //needed for UI menuing
+    implementation "com.google.android.material:material:1.14.0" //needed for UI menuing
     implementation "androidx.cardview:cardview:1.0.0"
     implementation "androidx.recyclerview:recyclerview:1.4.0"
-    implementation 'androidx.multidex:multidex:2.0.1'
 
     implementation "androidx.appcompat:appcompat:1.7.1"
     //crash logging
@@ -147,8 +189,7 @@ dependencies {
 
 
     //on device testing
-    androidTestImplementation 'androidx.multidex:multidex:2.0.1'
-    androidTestImplementation "androidx.annotation:annotation:1.7.1"
+    androidTestImplementation "androidx.annotation:annotation:1.10.0"
 
 
     androidTestImplementation "androidx.test:runner:1.7.0"
@@ -158,7 +199,7 @@ dependencies {
     // Optional -- UI testing with UI Automator
     androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
     // Optional -- UI testing with Compose
-    androidTestImplementation "androidx.compose.ui:ui-test-junit4:1.9.0"
+    androidTestImplementation "androidx.compose.ui:ui-test-junit4:1.11.3"
 
 
     implementation("mil.nga.geopackage:geopackage-android:6.7.5") {
@@ -180,56 +221,16 @@ dependencies {
     // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
     implementation 'androidx.sqlite:sqlite:2.6.2'
     implementation 'androidx.sqlite:sqlite-framework:2.6.2'
-
-
-
 }
 
-configurations.all {
+configurations.configureEach {
     resolutionStrategy {
         force "androidx.lifecycle:lifecycle-livedata:2.6.2"
         force "androidx.lifecycle:lifecycle-runtime:2.6.2"
         force "androidx.lifecycle:lifecycle-viewmodel:2.6.2"
 
         // Force use of system SQLite for 16KB compatibility
-        force 'androidx.sqlite:sqlite:2.4.0'
-        force 'androidx.sqlite:sqlite-framework:2.4.0'
-    }
-}
-
-
-
-//the following sets the required permissions for API 23+ devices and AVDs
-
-android.applicationVariants.all { variant ->
-    if (variant.getBuildType().name == "debug") {
-        tasks.register('"configDevice${variant.name.capitalize()}"', Exec) {
-            dependsOn variant.install
-
-            group = 'nameofyourtaskgroup'
-            description = 'Describe your task here.'
-
-            def adb = android.getAdbExecutable().toString()
-            def mypermission = 'android.permission.ACCESS_FINE_LOCATION'
-            commandLine "$adb shell pm grant ${variant.applicationId} $mypermission".split(' ')
-        }
-        variant.testVariant.connectedInstrumentTestProvider.get().dependsOn "configDevice${variant.name.capitalize()}"
-    }
-}
-
-
-android.applicationVariants.all { variant ->
-    if (variant.getBuildType().name == "debug") {
-        tasks.register('"configDevice2${variant.name.capitalize()}"', Exec) {
-            dependsOn variant.install
-
-            group = 'nameofyourtaskgroup'
-            description = 'Describe your task here.'
-
-            def adb = android.getAdbExecutable().toString()
-            def mypermission = 'android.permission.WRITE_EXTERNAL_STORAGE '
-            commandLine "$adb shell pm grant ${variant.applicationId} $mypermission".split(' ')
-        }
-        variant.testVariant.connectedInstrumentTestProvider.get().dependsOn "configDevice2${variant.name.capitalize()}"
+        force 'androidx.sqlite:sqlite:2.6.2'
+        force 'androidx.sqlite:sqlite-framework:2.6.2'
     }
 }

@@ -32,7 +32,7 @@ android {
 
 dependencies {
 
-    testImplementation 'org.junit.vintage:junit-vintage-engine:5.13.4'
+    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
     api  project(':osmdroid-android')
     api 'com.github.spyhunter99:jdbf:2.2.4'
 
@@ -57,9 +57,9 @@ afterEvaluate {
 
                     licenses {
                         license {
-                            name=project.property("pom.licenses.license.0.name");
-                            url=project.property("pom.licenses.license.0.url");
-                            distribution==project.property("pom.licenses.license.0.distribution");
+                            name=project.property("pom.licenses.license.0.name")
+                            url=project.property("pom.licenses.license.0.url")
+                            distribution==project.property("pom.licenses.license.0.distribution")
                         }
 
                     }
@@ -68,16 +68,5 @@ afterEvaluate {
         }
     }
 
-
-}
-
-
-tasks.register('androidSourcesJar', Jar) {
-    from android.sourceSets.main.java.srcDirs
-}
-
-artifacts {
-//    archives packageReleaseJar
-    archives androidSourcesJar
 
 }

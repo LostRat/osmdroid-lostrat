@@ -31,24 +31,26 @@ dependencies {
     testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
 
     //Mapsforge rendering and database support, which is LGPL
-    api 'org.mapsforge:mapsforge-map-android:0.25.0'
-    api 'org.mapsforge:mapsforge-map:0.25.0'
-    api 'org.mapsforge:mapsforge-themes:0.25.0'
+//    api 'org.mapsforge:mapsforge-map-android:0.25.0'
+//    api 'org.mapsforge:mapsforge-map:0.25.0'
+//    api 'org.mapsforge:mapsforge-themes:0.25.0'
+
+    // local maven access
+//    api 'org.mapsforge:mapsforge-map-android:master-SNAPSHOT'
+//    api 'org.mapsforge:mapsforge-map:master-SNAPSHOT'
+//    api 'org.mapsforge:mapsforge-themes:master-SNAPSHOT'
+
+    // jitpack access
+    api 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.28.0'
+    api 'com.github.mapsforge.mapsforge:mapsforge-map:0.28.0'
+    api 'com.github.mapsforge.mapsforge:mapsforge-themes:0.28.0'
+
+
 
     //osmdroid which is ASF licensed
     api  project(':osmdroid-android' )
 }
 
-
-tasks.register('androidSourcesJar', Jar) {
-    from android.sourceSets.main.java.srcDirs
-}
-
-artifacts {
-//    archives packageReleaseJar
-    archives androidSourcesJar
-
-}
 
 afterEvaluate {
     publishing {

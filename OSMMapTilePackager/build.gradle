@@ -21,7 +21,7 @@ java {
     withJavadocJar()
 }
 
-tasks.withType(Javadoc) {
+tasks.withType(Javadoc).configureEach {
     failOnError = false
     options.addStringOption('Xdoclint:none', '-quiet')
     options.addStringOption('encoding', 'UTF-8')
@@ -30,8 +30,8 @@ tasks.withType(Javadoc) {
 
 dependencies {
     implementation 'org.apache.httpcomponents:httpmime:4.5.14'
-    implementation 'org.apache.james:apache-mime4j:0.8.13'
-    implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
+    implementation 'org.apache.james:apache-mime4j:0.8.14'
+    implementation 'org.xerial:sqlite-jdbc:3.53.2.0'
 
 
     testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
@@ -104,7 +104,7 @@ tasks.named("sourcesJar") {
 }
 
 afterEvaluate {
-    tasks.matching { it.name == "publishPdZipPublicationPublicationToMavenLocal" }.all {
+    tasks.matching { it.name == "publishPdZipPublicationPublicationToMavenLocal" }.configureEach {
         dependsOn(tasks.named("distZip"))
     }
 }
