@@ -47,7 +47,6 @@ OSMMapTilePackager/src/main/java/org/osmdroid/util/GEMFFile.java
 OSMMapTilePackager/src/main/java/org/osmdroid/api/
 
 
-docs/
 osmdroid-android/src/main/java/org/osmdroid/OsmdroidBuildInfo.java
 lint-report-*.html
 osmdroid-dist-*.zip

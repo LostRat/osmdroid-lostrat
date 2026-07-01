@@ -48,9 +48,23 @@ implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.1-lostr
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.1-lostrat-SNAPSHOT")
 ```
 
-If you clone the repo you could then go back to an earlier commit before my AI aided changes from August 2025 forward. I think my ample use of markdown files at root might be useful to someone.
+If you clone the repo you could then go back to an earlier commit before my AI aided changes from August 2025 forward. Additional documentation lives in the [`docs/`](docs/) folder (see below).
 
 You can include a cloned OSMDroid folder inside your `settings.gradle` file: `includeBuild 'your/clone/path'`
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/CHANGELOG-lostrat.md](docs/CHANGELOG-lostrat.md) | Fork-specific changelog (Markdown) |
+| [docs/CHANGELOG-lostrat.html](docs/CHANGELOG-lostrat.html) | Same changelog as HTML (readable in a browser) |
+| [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system |
+
+### Interactive overlays (markers & polylines)
+
+See **[docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md)** for how draw order and tap handling work with the enhanced layer system — decoration vs interactive markers, user-drawn lines on top, FolderOverlay flattening, and manual overrides.
+
+**Tip for AI-assisted coding:** When using Cursor, Copilot, Gemini CLI, or similar tools, point the assistant at `docs/ENHANCED_LAYER_SYSTEM.md` (or add it to your project rules) when you need help making polylines and markers interactive or fixing overlay tap/draw-order issues.
 
 **Note:** once upon a time this `includeBuild` method had worked for me for MapsForge
 

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LostRat Fork Changelog</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.6;
+      max-width: 52rem;
+      margin: 2rem auto;
+      padding: 0 1.25rem;
+    }
+    h1 { border-bottom: 2px solid #8884; padding-bottom: 0.25rem; }
+    h2 { margin-top: 2rem; color: #2563eb; }
+    h3 { margin-top: 1.25rem; }
+    ul { padding-left: 1.25rem; }
+    a { color: #2563eb; }
+    .meta { color: #666; font-size: 0.95rem; }
+    code { background: #8882; padding: 0.1em 0.35em; border-radius: 4px; }
+    hr { border: none; border-top: 1px solid #8884; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+  <h1>LostRat Fork Changelog</h1>
+  <p class="meta">
+    Changes specific to the
+    <a href="https://github.com/LostRat/osmdroid-lostrat">LostRat osmdroid fork</a>.
+    Upstream history: <a href="../CHANGELOG.md">CHANGELOG.md</a> (Markdown).
+  </p>
+  <p class="meta">
+    <strong>Current development version:</strong> <code>7.0.1-lostrat-SNAPSHOT</code><br>
+    <strong>Latest tagged release:</strong> <code>v7.0.0-lostrat</code>
+  </p>
+  <hr>
+
+  <h2>[Unreleased] — 7.0.1-lostrat-SNAPSHOT (in progress)</h2>
+
+  <h3>Build &amp; tooling</h3>
+  <ul>
+    <li>Update Gradle 9.5, AGP 9.2, compile/target SDK 37, and module dependencies</li>
+    <li>Update Gradle and Android build tooling (May 2026)</li>
+    <li>Remove MultiDex from OpenStreetMapViewer sample app</li>
+  </ul>
+
+  <h3>MapsForge</h3>
+  <ul>
+    <li>Update <code>MapsForgeTileSource</code> for MapsForge 0.28.0 DirectRenderer API</li>
+  </ul>
+
+  <h3>Performance</h3>
+  <ul>
+    <li>Reduce per-frame allocations in marker and polyline draw paths</li>
+    <li>Eliminate per-frame allocations in polyline/polygon draw path</li>
+    <li>Speed up tile index decode and zoom factor lookup</li>
+  </ul>
+
+  <h3>Overlays &amp; gestures</h3>
+  <ul>
+    <li>Improve ScaleBarOverlay contrast and styling options</li>
+    <li>Fix one-finger double-tap-hold zoom behavior</li>
+    <li>Handle edge-to-edge status bar insets on sample app toolbars</li>
+  </ul>
+
+  <h3>Sample app</h3>
+  <ul>
+    <li>Update ACRA crash reporting integration</li>
+    <li>Replace resource ID switches with safer navigation patterns</li>
+  </ul>
+
+  <h3>Bug fixes</h3>
+  <ul>
+    <li>Fix GeoPoint distance precision for nearby points</li>
+  </ul>
+
+  <hr>
+
+  <h2>[7.0.1-lostrat-SNAPSHOT] — 2025-11-27</h2>
+  <ul>
+    <li>Bump version to 7.0.1-lostrat-SNAPSHOT</li>
+    <li>Update README with JitPack coordinates for 7.0.x line</li>
+  </ul>
+
+  <hr>
+
+  <h2>[7.0.0-lostrat] — 2025-11-27</h2>
+  <p>Tagged release <code>v7.0.0-lostrat</code>.</p>
+
+  <h3>Overlay system (major)</h3>
+  <ul>
+    <li><strong>10-layer z-index system</strong> — automatic draw order and tap priority (<a href="ENHANCED_LAYER_SYSTEM.md">Enhanced Layer System</a>)</li>
+    <li><strong>Spatial indexing</strong> — grid-based hit testing for 100+ overlays</li>
+    <li><strong>FolderOverlay flattening</strong> — children assigned to intrinsic layers</li>
+    <li><strong><code>Overlay.isInteractive()</code></strong> — base-class interactivity flag</li>
+    <li><strong>Smart marker detection</strong> — decoration vs interactive assignment</li>
+    <li><strong>Helper methods</strong> — <code>markAsInteractive()</code>, <code>markAsDecoration()</code>, <code>markAsUserDrawing()</code></li>
+    <li><strong>Thread safety</strong> improvements in <code>DefaultOverlayManager</code></li>
+    <li><strong>Remove parallel stream tap processing</strong> — fixes unreliable tap handling at scale (Dec 2025)</li>
+  </ul>
+
+  <h3>Cache &amp; database</h3>
+  <ul>
+    <li>Modular CacheManager architecture optimized for API 23+</li>
+    <li>SQLite optimizations for Android P+; read-only database crash prevention</li>
+    <li>SqlTileWriter null-safety for unavailable databases</li>
+  </ul>
+
+  <h3>Map interaction</h3>
+  <ul>
+    <li>Rotation gesture listener interface and smoother rotation input</li>
+    <li>Improved single-tap detection for polylines and polygons</li>
+    <li>MapView projection and layout caching</li>
+  </ul>
+
+  <h3>Utilities</h3>
+  <ul>
+    <li>Rewrite <code>BoundingBox.overlaps()</code> with correct AABB and date-line logic</li>
+    <li><code>BoundingBox.fromGeoPointsSafe()</code> helper</li>
+    <li>Coordinate wrapping and distance calculation optimizations (API 23+)</li>
+    <li>GeoPackage bitmap density scaling fix</li>
+  </ul>
+
+  <h3>Build &amp; platform</h3>
+  <ul>
+    <li>Minimum SDK 23 (Android 6.0); Java 17</li>
+    <li>Gradle 8.x → 9.x migration path; 16 KB page size compliance</li>
+    <li>Sample app modernization; MapsForge integration with density-aware scaling</li>
+  </ul>
+
+  <hr>
+
+  <h2>[6.1.22-lostrat] — earlier fork baseline</h2>
+  <ul>
+    <li>Fork from upstream osmdroid for personal app use</li>
+    <li>Minimum API 23, Gradle 8 updates</li>
+    <li>MapsForge 0.25.0 integration in sample app</li>
+    <li>JitPack publishing support</li>
+  </ul>
+
+  <hr>
+  <p class="meta"><em>Markdown version: <a href="CHANGELOG-lostrat.md">CHANGELOG-lostrat.md</a></em></p>
+</body>
+</html>
