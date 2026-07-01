@@ -94,6 +94,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     public int screenHeight;
 
     private Paint barPaint;
+    private Paint barHaloPaint;
     private Paint bgPaint;
     private Paint textPaint;
     private Paint textBackgroundPaint;
@@ -101,13 +102,20 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     private boolean centred = false;
     private boolean adjustLength = false;
     private float maxLength;
-    
+
     // Enhanced styling options
     public enum TextSize { SMALLEST, SMALLER, NORMAL, LARGER, LARGEST }
     private TextSize mTextSizeOption = TextSize.NORMAL;
     private boolean mDensityScalingEnabled = true;
     private float mCornerRadius = 4f;
     private boolean mTextBackgroundEnabled = true;
+    private int mTextColor = Color.WHITE;
+
+    // Contrast halo drawn underneath the bar lines so they stay legible on
+    // both light and dark map backgrounds (satellite imagery, dark themes, etc.)
+    private boolean mBarHaloEnabled = true;
+    private int mBarHaloColor = Color.WHITE;
+    private float mBarHaloExtraWidth; // total extra stroke width over the bar, in px (density-scaled)
 
     /**
      * @since 6.1.0
@@ -160,12 +168,23 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         this.textPaint.setStyle(Style.FILL);
         this.textPaint.setAlpha(255);
         this.textPaint.setTextSize(6f * dm.density); // 40% smaller than 12dp
-        
+
         // Text background paint
         this.textBackgroundPaint = new Paint();
         this.textBackgroundPaint.setColor(Color.BLACK);
         this.textBackgroundPaint.setStyle(Style.FILL);
-        this.textBackgroundPaint.setAlpha(200);
+        this.textBackgroundPaint.setAlpha(210); // Slightly darker box for better contrast
+
+        // Contrast halo paint for the bar lines. Drawn first, thicker than the
+        // bar itself, so the (black) bar reads clearly over any map background.
+        this.barHaloPaint = new Paint();
+        this.barHaloPaint.setColor(mBarHaloColor);
+        this.barHaloPaint.setAntiAlias(true);
+        this.barHaloPaint.setStyle(Style.STROKE);
+        this.barHaloPaint.setStrokeCap(Paint.Cap.ROUND);
+        this.barHaloPaint.setStrokeJoin(Paint.Join.ROUND);
+        // ~2dp of halo on each side of the bar line
+        this.mBarHaloExtraWidth = 4f * dm.density;
 
         this.xdpi = dm.xdpi;
         this.ydpi = dm.ydpi;
@@ -436,8 +455,15 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
             scaledBarPaint = new Paint(barPaint);
             scaledBarPaint.setStrokeWidth(DisplayDensityManager.getInstance().getScaledLineWidth(barPaint.getStrokeWidth()));
         }
+        // Draw a contrasting halo underneath so the bar stays visible on any
+        // background, then the bar itself on top.
+        if (mBarHaloEnabled && barHaloPaint != null) {
+            barHaloPaint.setColor(mBarHaloColor);
+            barHaloPaint.setStrokeWidth(scaledBarPaint.getStrokeWidth() + mBarHaloExtraWidth);
+            c.drawPath(barPath, barHaloPaint);
+        }
         c.drawPath(barPath, scaledBarPaint);
-        
+
         if (latitudeBar) {
             drawLatitudeText(c, projection);
         }
@@ -485,27 +511,27 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         // Apply density-aware text scaling with size option
         Paint scaledTextPaint = new Paint(textPaint);
         float baseSize = textPaint.getTextSize();
-        
+
         // Apply text size multiplier
         float sizeMultiplier = getTextSizeMultiplier();
         baseSize *= sizeMultiplier;
-        
+
         if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
             baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
         }
         scaledTextPaint.setTextSize(baseSize);
-        scaledTextPaint.setColor(Color.WHITE); // Clean white text
-        
+        scaledTextPaint.setColor(mTextColor);
+
         // Recalculate text bounds with scaled text
         scaledTextPaint.getTextBounds(xMsg, 0, xMsg.length(), sTextBoundsRect);
-        
+
         float x = xBarLengthPixels / 2 - sTextBoundsRect.width() / 2;
         if (alignRight) x += screenWidth - xBarLengthPixels;
         float y;
         if (alignBottom) {
             y = screenHeight - xTextSpacing * 2;
         } else y = sTextBoundsRect.height() + xTextSpacing;
-        
+
         // Draw text background if enabled
         if (mTextBackgroundEnabled) {
             float padding = 6f; // More padding around text
@@ -513,7 +539,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
                     x + sTextBoundsRect.width() + padding, y + padding,
                     mCornerRadius, mCornerRadius, textBackgroundPaint);
         }
-        
+
         canvas.drawText(xMsg, x, y, scaledTextPaint);
     }
 
@@ -545,30 +571,30 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         // Apply density-aware text scaling with size option
         Paint scaledTextPaint = new Paint(textPaint);
         float baseSize = textPaint.getTextSize();
-        
+
         // Apply text size multiplier
         float sizeMultiplier = getTextSizeMultiplier();
         baseSize *= sizeMultiplier;
-        
+
         if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
             baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
         }
         scaledTextPaint.setTextSize(baseSize);
-        scaledTextPaint.setColor(Color.WHITE); // Clean white text
-        
+        scaledTextPaint.setColor(mTextColor);
+
         // Recalculate text bounds with scaled text
         scaledTextPaint.getTextBounds(yMsg, 0, yMsg.length(), sTextBoundsRect);
-        
+
         float x;
         if (alignRight) {
             x = screenWidth - yTextSpacing * 2;
         } else x = sTextBoundsRect.height() + yTextSpacing;
         float y = yBarLengthPixels / 2 + sTextBoundsRect.width() / 2;
         if (alignBottom) y += screenHeight - yBarLengthPixels;
-        
+
         canvas.save();
         canvas.rotate(-90, x, y);
-        
+
         // Draw text background if enabled
         if (mTextBackgroundEnabled) {
             float padding = 6f; // More padding around text
@@ -576,7 +602,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
                     sTextBoundsRect.width() / 2 + padding, sTextBoundsRect.height() / 2 + padding,
                     mCornerRadius, mCornerRadius, textBackgroundPaint);
         }
-        
+
         canvas.drawText(yMsg, x, y, scaledTextPaint);
         canvas.restore();
     }
@@ -653,7 +679,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         // Calculate enhanced end bar dimensions - taller uprights that extend down
         float endBarHeight = xTextHeight * 2.0f; // Much taller uprights
         float endBarWidth = yTextHeight * 2.0f;
-        
+
         if (latitudeBar) {
             // draw latitude bar with taller uprights extending down
             barPath.moveTo(barToX, barOriginY + endBarHeight);
@@ -662,7 +688,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
             barPath.lineTo(barOriginX, barOriginY);
             barPath.moveTo(barOriginX, barOriginY - endBarHeight * 0.3f); // Extend up a bit
             barPath.lineTo(barOriginX, barOriginY + endBarHeight);
-            
+
             latitudeBarRect.set(barOriginX, barOriginY, barToX, barOriginY + xTextHeight + xTextSpacing * 2);
         }
 
@@ -772,8 +798,10 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         this.context = null;
         this.mMapView = null;
         barPaint = null;
+        barHaloPaint = null;
         bgPaint = null;
         textPaint = null;
+        textBackgroundPaint = null;
     }
 
     /**
@@ -814,7 +842,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         mTextSizeOption = textSize;
         lastZoomLevel = -1; // Force redraw
     }
-    
+
     /**
      * Enable or disable automatic density scaling
      */
@@ -822,14 +850,14 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         mDensityScalingEnabled = enabled;
         lastZoomLevel = -1; // Force redraw
     }
-    
+
     /**
      * Check if density scaling is enabled
      */
     public boolean isDensityScalingEnabled() {
         return mDensityScalingEnabled;
     }
-    
+
     /**
      * Set corner radius for text background
      */
@@ -837,7 +865,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         mCornerRadius = radius;
         lastZoomLevel = -1; // Force redraw
     }
-    
+
     /**
      * Enable or disable text background boxes
      */
@@ -845,7 +873,108 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         mTextBackgroundEnabled = enabled;
         lastZoomLevel = -1; // Force redraw
     }
-    
+
+    /**
+     * Sets the color of the scale bar text. Default is white.
+     *
+     * @param color the text color (ARGB)
+     */
+    public void setTextColor(int color) {
+        mTextColor = color;
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * @return the current scale bar text color
+     */
+    public int getTextColor() {
+        return mTextColor;
+    }
+
+    /**
+     * Sets the color of the rounded box drawn behind the scale bar text.
+     * The current alpha (opacity) of the background paint is preserved.
+     *
+     * @param color the background box color (RGB; alpha is kept from the existing paint)
+     */
+    public void setTextBackgroundColor(int color) {
+        final int alpha = textBackgroundPaint.getAlpha();
+        textBackgroundPaint.setColor(color);
+        textBackgroundPaint.setAlpha(alpha);
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * Sets the paint used to draw the rounded box behind the scale bar text.
+     *
+     * @param pTextBackgroundPaint the text background paint (must not be null)
+     */
+    public void setTextBackgroundPaint(final Paint pTextBackgroundPaint) {
+        if (pTextBackgroundPaint == null) {
+            throw new IllegalArgumentException("pTextBackgroundPaint argument cannot be null");
+        }
+        textBackgroundPaint = pTextBackgroundPaint;
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * @return the paint used to draw the rounded box behind the scale bar text
+     */
+    public Paint getTextBackgroundPaint() {
+        return textBackgroundPaint;
+    }
+
+    /**
+     * Enables or disables the contrast halo drawn underneath the bar lines.
+     * The halo keeps the bar legible over light and dark map backgrounds.
+     * Enabled by default.
+     *
+     * @param enabled true to draw the halo, false to draw the bare bar only
+     */
+    public void setBarHaloEnabled(boolean enabled) {
+        mBarHaloEnabled = enabled;
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * @return whether the bar contrast halo is enabled
+     */
+    public boolean isBarHaloEnabled() {
+        return mBarHaloEnabled;
+    }
+
+    /**
+     * Sets the color (ARGB) of the contrast halo drawn underneath the bar lines.
+     * Default is opaque white, which suits the default black bar. Use a dark
+     * color if you switch the bar itself to a light color.
+     *
+     * @param color the halo color (ARGB)
+     */
+    public void setBarHaloColor(int color) {
+        mBarHaloColor = color;
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * @return the current bar halo color (ARGB)
+     */
+    public int getBarHaloColor() {
+        return mBarHaloColor;
+    }
+
+    /**
+     * Sets the total extra stroke width of the halo relative to the bar line,
+     * in pixels (i.e. the halo extends this many pixels / 2 beyond each side of
+     * the bar). Default is ~4dp. Pass a density-scaled value if you need exact
+     * control.
+     *
+     * @param extraWidthPx total extra halo width in pixels (clamped to >= 0)
+     */
+    public void setBarHaloWidth(float extraWidthPx) {
+        mBarHaloExtraWidth = Math.max(0f, extraWidthPx);
+        lastZoomLevel = -1; // Force redraw
+    }
+
     private float getTextSizeMultiplier() {
         switch (mTextSizeOption) {
             case SMALLEST: return 0.6f;
