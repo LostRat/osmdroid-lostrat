@@ -3,12 +3,18 @@
 Changes specific to the [LostRat osmdroid fork](https://github.com/LostRat/osmdroid-lostrat).  
 Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repository root.
 
-**Current development version:** `7.0.1-lostrat-SNAPSHOT`  
-**Latest tagged release:** `v7.0.0-lostrat`
+**Release version:** `7.0.1-lostrat`  
+**Latest tagged release:** `v7.0.1-lostrat`
 
 ---
 
-## [Unreleased] — 7.0.1-lostrat-SNAPSHOT (in progress)
+## [Unreleased]
+
+---
+
+## [7.0.1-lostrat] — 2026-07-01
+
+Tagged release `v7.0.1-lostrat`.
 
 ### Build & tooling
 
@@ -41,12 +47,10 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 - Fix GeoPoint distance precision for nearby points
 
----
+### Documentation
 
-## [7.0.1-lostrat-SNAPSHOT] — 2025-11-27
-
-- Bump version to 7.0.1-lostrat-SNAPSHOT
-- Update README with JitPack coordinates for 7.0.x line
+- Add `docs/` folder with fork changelog and enhanced layer system guide
+- Link documentation from README; track `docs/` in git
 
 ---
 
