@@ -1,5 +1,6 @@
 package org.osmdroid;
 
+import android.app.Application;
 import android.content.Context;
 import android.os.Environment;
 import android.os.StrictMode;
@@ -19,9 +20,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-import androidx.multidex.MultiDex;
-import androidx.multidex.MultiDexApplication;
-
 /**
  * This is the base application for the sample app. We only use to catch errors during development cycles
  * <p>
@@ -33,7 +31,7 @@ import androidx.multidex.MultiDexApplication;
         formUri = "",
         reportSenderFactoryClasses = {OsmApplication.ErrorFileWriterFactory.class}
 )
-public class OsmApplication extends MultiDexApplication {
+public class OsmApplication extends Application {
 
     @Override
     public void onCreate() {
@@ -103,7 +101,6 @@ public class OsmApplication extends MultiDexApplication {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        MultiDex.install(this);
 
         try {
             // Initialise ACRA

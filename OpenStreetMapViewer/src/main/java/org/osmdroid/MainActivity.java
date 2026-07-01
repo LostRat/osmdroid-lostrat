@@ -33,7 +33,8 @@ import java.util.ArrayList;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.multidex.BuildConfig;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
 
@@ -48,6 +49,10 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         setContentView(R.layout.activity_main);
         Toolbar myToolbar = findViewById(R.id.my_toolbar);
         setSupportActionBar(myToolbar);
+        ViewCompat.setOnApplyWindowInsetsListener(myToolbar, (v, insets) -> {
+            v.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.systemBars()).top, 0, 0);
+            return insets;
+        });
         // Generate a ListView with Sample Maps
         final ArrayList<String> list = new ArrayList<>();
         list.add("OSMDroid Sample Map (Start Here)");
