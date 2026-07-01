@@ -2,11 +2,8 @@ package org.osmdroid.util;
 
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.util.ArrayMap;
 
 import org.osmdroid.util.constants.GeoConstants;
-
-import java.util.Map;
 
 /**
  * Proxy class for TileSystem. For coordinate conversions (tile to lat/lon and reverse) TileSystem
@@ -125,24 +122,11 @@ abstract public class TileSystem {
     /**
      * @since 6.0.0
      */
-// Add at class level (API 23+)
-    private static final Map<Integer, Double> ZOOM_FACTOR_CACHE = new ArrayMap<>(24);
-
-    static {
-        // Pre-compute common zoom levels (0-22 covers all practical cases)
-        for (int i = 0; i <= 22; i++) {
-            ZOOM_FACTOR_CACHE.put(i, Math.pow(2, i));
-        }
-    }
-
     public static double getFactor(final double pZoomLevel) {
-        // Fast path for integer zoom levels (most common case)
-        int intZoom = (int) pZoomLevel;
-        if (pZoomLevel == intZoom && ZOOM_FACTOR_CACHE.containsKey(intZoom)) {
-            return ZOOM_FACTOR_CACHE.get(intZoom);
+        final int intZoom = (int) pZoomLevel;
+        if (pZoomLevel == intZoom && intZoom >= 0 && intZoom <= 62) {
+            return (double) (1L << intZoom);
         }
-
-        // Fallback for fractional zoom levels
         return Math.pow(2, pZoomLevel);
     }
 

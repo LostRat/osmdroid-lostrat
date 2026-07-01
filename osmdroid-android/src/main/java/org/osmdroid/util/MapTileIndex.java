@@ -13,7 +13,7 @@ package org.osmdroid.util;
 public class MapTileIndex {
 
     public static int mMaxZoomLevel = TileSystem.primaryKeyMaxZoomLevel;
-    private static int mModulo = 1 << mMaxZoomLevel;
+    private static final long mModuloMask = (1L << mMaxZoomLevel) - 1;
 
     public static long getTileIndex(final int pZoom, final int pX, final int pY) {
         checkValues(pZoom, pX, pY);
@@ -27,11 +27,11 @@ public class MapTileIndex {
     }
 
     public static int getX(final long pTileIndex) {
-        return (int) ((pTileIndex >> mMaxZoomLevel) % mModulo);
+        return (int) ((pTileIndex >> mMaxZoomLevel) & mModuloMask);
     }
 
     public static int getY(final long pTileIndex) {
-        return (int) (pTileIndex % mModulo);
+        return (int) (pTileIndex & mModuloMask);
     }
 
     /**
