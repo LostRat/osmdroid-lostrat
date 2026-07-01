@@ -107,6 +107,7 @@ public class Marker extends OverlayWithIW {
     private boolean mDisplayed;
     private final Rect mRect = new Rect();
     private final Rect mOrientedMarkerRect = new Rect();
+    private final Rect mClipRect = new Rect();
     private Paint mPaint;
 
     public Marker(MapView mapView) {
@@ -687,7 +688,8 @@ public class Marker extends OverlayWithIW {
         final int offsetY = pY - Math.round(markerHeight * mAnchorV);
         mRect.set(offsetX, offsetY, offsetX + markerWidth, offsetY + markerHeight);
         RectL.getBounds(mRect, pX, pY, pOrientation, mOrientedMarkerRect);
-        mDisplayed = Rect.intersects(mOrientedMarkerRect, pCanvas.getClipBounds());
+        pCanvas.getClipBounds(mClipRect);
+        mDisplayed = Rect.intersects(mOrientedMarkerRect, mClipRect);
         if (!mDisplayed) { // optimization 1: (much faster, depending on the proportions) don't try to display if the Marker is not visible
             return;
         }

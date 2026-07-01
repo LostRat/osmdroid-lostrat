@@ -74,8 +74,6 @@ public abstract class PolyOverlayWithIW extends OverlayWithIW {
     // API 23+ optimization: Cache expensive hit test calculations
     private static final LruCache<String, Boolean> sHitTestCache = new LruCache<>(500);
     private long mLastProjectionHash = 0;
-    private BoundingBox mCachedBounds = null;
-    private long mBoundsVersion = 0;
 
     protected PolyOverlayWithIW(final MapView pMapView, final boolean pUsePath, final boolean pClosePath) {
         super();
@@ -612,27 +610,7 @@ public abstract class PolyOverlayWithIW extends OverlayWithIW {
         if (mOutline == null || mOutline.getPoints().isEmpty()) {
             return null;
         }
-        
-        // Use cached bounds if outline hasn't changed
-        long currentVersion = mOutline.getPoints().hashCode();
-        if (mCachedBounds != null && mBoundsVersion == currentVersion) {
-            return mCachedBounds;
-        }
-        
-        // Calculate new bounds
-        double minLat = Double.MAX_VALUE, maxLat = -Double.MAX_VALUE;
-        double minLon = Double.MAX_VALUE, maxLon = -Double.MAX_VALUE;
-        
-        for (GeoPoint point : mOutline.getPoints()) {
-            minLat = Math.min(minLat, point.getLatitude());
-            maxLat = Math.max(maxLat, point.getLatitude());
-            minLon = Math.min(minLon, point.getLongitude());
-            maxLon = Math.max(maxLon, point.getLongitude());
-        }
-        
-        mCachedBounds = new BoundingBox(maxLat, maxLon, minLat, minLon);
-        mBoundsVersion = currentVersion;
-        return mCachedBounds;
+        return mOutline.getBoundingBox();
     }
     
     /**

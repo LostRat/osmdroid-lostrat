@@ -44,6 +44,7 @@ public abstract class ItemizedOverlay<Item extends OverlayItem> extends Overlay 
     private final Rect mRect = new Rect();
     private final Rect mMarkerRect = new Rect();
     private final Rect mOrientedMarkerRect = new Rect();
+    private final Rect mClipRect = new Rect();
     private final Point mCurScreenCoords = new Point();
     protected boolean mDrawFocusedItem = true;
     private Item mFocusedItem;
@@ -215,7 +216,8 @@ public abstract class ItemizedOverlay<Item extends OverlayItem> extends Overlay 
         mMarkerRect.set(mRect);
         mRect.offset(x, y);
         RectL.getBounds(mRect, x, y, pProjection.getOrientation(), mOrientedMarkerRect);
-        final boolean displayed = Rect.intersects(mOrientedMarkerRect, canvas.getClipBounds());
+        canvas.getClipBounds(mClipRect);
+        final boolean displayed = Rect.intersects(mOrientedMarkerRect, mClipRect);
         if (displayed) {
             if (pProjection.getOrientation() != 0) { // optimization: step 1/2
                 canvas.save();
