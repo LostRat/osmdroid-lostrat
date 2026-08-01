@@ -302,7 +302,7 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
      * Apply automatic density-aware scaling (recommended)
      */
     public void applyDensityScaling() {
-        if (DisplayDensityManager.getInstance() != null) {
+        if (DisplayDensityManager.isInitialized()) {
             float autoScale = DisplayDensityManager.getInstance().getMapForgeScaleFactor();
             model.setUserScaleFactor(autoScale);
             Log.d(IMapView.LOGTAG, "Applied automatic MapForge scaling: " + autoScale + 

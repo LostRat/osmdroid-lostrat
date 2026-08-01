@@ -21,9 +21,11 @@ import org.osmdroid.R;
 import org.osmdroid.gpkg.tiles.raster.GeoPackageMapTileModuleProvider;
 import org.osmdroid.gpkg.tiles.raster.GeoPackageProvider;
 import org.osmdroid.gpkg.tiles.raster.GeopackageRasterTileSource;
+import org.osmdroid.mapsforge.MapsForgeTileCacheKeys;
 import org.osmdroid.mapsforge.MapsForgeTileModuleProvider;
 import org.osmdroid.mapsforge.MapsForgeTileSource;
 import org.osmdroid.samplefragments.BaseSampleFragment;
+import org.osmdroid.tileprovider.MapTileProviderBasic;
 import org.osmdroid.tileprovider.MapTileProviderArray;
 import org.osmdroid.tileprovider.modules.ArchiveFileFactory;
 import org.osmdroid.tileprovider.modules.IArchiveFile;
@@ -40,6 +42,7 @@ import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -149,6 +152,8 @@ public class OfflinePickerSample extends BaseSampleFragment implements View.OnCl
         tileSources.clear();
         List<MapTileModuleProviderBase> providers = new ArrayList<>();
         providers.add(new MapTileAssetsProvider(simpleRegisterReceiver, getContext().getAssets()));
+        providers.add(MapTileProviderBasic.getMapTileFileStorageProviderBase(
+                simpleRegisterReceiver, TileSourceFactory.DEFAULT_TILE_SOURCE, tileWriter));
 
         List<File> geopackages = new ArrayList<>();
         List<File> forgeMaps = new ArrayList<>();
@@ -210,6 +215,8 @@ public class OfflinePickerSample extends BaseSampleFragment implements View.OnCl
 
         MapsForgeTileModuleProvider moduleProvider = null;
         if (!forgeMaps.isEmpty()) {
+            MapsForgeTileSource.createInstance(this.getActivity().getApplication());
+
             //fire up the forge maps...
             XmlRenderTheme theme = null;
             try {
@@ -218,9 +225,13 @@ public class OfflinePickerSample extends BaseSampleFragment implements View.OnCl
                 ex.printStackTrace();
             }
 
-            File[] forge = new File[forgeMaps.size()];
-            forge = forgeMaps.toArray(forge);
-            MapsForgeTileSource fromFiles = MapsForgeTileSource.createFromFiles(forge, theme, "rendertheme-v4");
+            Collections.sort(forgeMaps);
+            File[] forge = forgeMaps.toArray(new File[0]);
+            final String themeName = "rendertheme-v4";
+            final String tileCacheSourceName = MapsForgeTileCacheKeys.forMapsAndTheme(
+                    forge, themeName);
+            MapsForgeTileSource fromFiles = MapsForgeTileSource.createFromFiles(forge, theme, tileCacheSourceName);
+            fromFiles.applyDensityScaling();
             tileSources.add(fromFiles);
             // Create the module provider; this class provides a TileLoader that
             // actually loads the tile from the map file.

@@ -11,6 +11,7 @@ import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.rendertheme.XmlRenderTheme;
 import org.osmdroid.api.IMapView;
 import org.osmdroid.config.Configuration;
+import org.osmdroid.mapsforge.MapsForgeTileCacheKeys;
 import org.osmdroid.mapsforge.MapsForgeTileProvider;
 import org.osmdroid.mapsforge.MapsForgeTileSource;
 import org.osmdroid.samplefragments.BaseSampleFragment;
@@ -28,9 +29,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import static android.util.TypedValue.COMPLEX_UNIT_DIP;
-import static android.util.TypedValue.applyDimension;
 
 /**
  * An example of using MapsForge in osmdroid
@@ -155,8 +153,9 @@ public class MapsforgeTileProviderSample extends BaseSampleFragment {
         //this bit does some basic file system scanning
         Set<File> mapfiles = findMapFiles();
         //do a simple scan of local storage for .map files.
-        File[] maps = new File[mapfiles.size()];
-        maps = mapfiles.toArray(maps);
+        List<File> sortedMapFiles = new ArrayList<>(mapfiles);
+        Collections.sort(sortedMapFiles);
+        File[] maps = sortedMapFiles.toArray(new File[0]);
         if (maps == null || maps.length == 0) {
             //show a warning that no map files were found
             AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(
@@ -198,30 +197,16 @@ public class MapsforgeTileProviderSample extends BaseSampleFragment {
                 ex.printStackTrace();
             }
 
-            fromFiles = MapsForgeTileSource.createFromFiles(maps, theme, "rendertheme-v4");
+            final String themeName = "rendertheme-v4";
+            // Keyed on the render scale applyDensityScaling() will apply, so the cache
+            // namespace tracks what is actually rendered rather than the raw density.
+            final String tileCacheSourceName = MapsForgeTileCacheKeys.forMapsAndTheme(
+                    maps, themeName);
+            fromFiles = MapsForgeTileSource.createFromFiles(maps, theme, tileCacheSourceName);
+            fromFiles.applyDensityScaling();
             forge = new MapsForgeTileProvider(
                     new SimpleRegisterReceiver(getContext()),
-                    fromFiles, null);
-
-            // with value of .5F the map tiles more closely resemble that of native MapsForge basic map
-            // fromFiles.setUserScaleFactor(.5F);
-
-            // Ron Ledbury
-            // This scaleFactor math was necessary because of high DPI screens.
-            // Worked with MapsForge version 0.20.0, thus with archived OSMDroid repo.
-
-            // use some official android sample code to get some value -- any value -- to test
-            final float GESTURE_THRESHOLD_DP = 16.0f;
-            float gestureThreshold =  applyDimension(
-                    COMPLEX_UNIT_DIP,
-                    GESTURE_THRESHOLD_DP + 0.5f,
-                    getResources().getDisplayMetrics());
-            //    Log.d(TAG, "screenWidth gestureThreshold: " + gestureThreshold);
-
-            // Through trial and error. You can try different values.
-            float scaleFactor = .6F;
-            scaleFactor = scaleFactor * (34F/gestureThreshold);
-            fromFiles.setUserScaleFactor(scaleFactor);
+                    fromFiles);
 
             mMapView.setTileProvider(forge);
 
