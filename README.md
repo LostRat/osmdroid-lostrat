@@ -24,12 +24,12 @@ JitPack only serves three kinds of version, and the version string is **not** th
 
 | Version string | What you get |
 |---|---|
-| `v7.0.1-lostrat` (a git tag) | Fixed, reproducible. Use this. |
+| `v7.0.2-lostrat` (a git tag) | Fixed, reproducible. Use this. |
 | `<40-char commit hash>` or its short form | That exact commit. Useful to try a fix before it is tagged. |
 | `master-SNAPSHOT` | Latest push to `master`. Moves under you; JitPack may cache it for a day. |
 
-There is no `7.0.2-lostrat-SNAPSHOT` on JitPack. That string is the in-repo `pom.version` and only
-exists in your **local** Maven repository after you build it yourself:
+Local Maven builds use the `pom.version` from the checked-out commit. For the release tag, build it
+yourself with:
 
 ```bash
 ./gradlew clean build publishToMavenLocal
@@ -37,41 +37,43 @@ exists in your **local** Maven repository after you build it yourself:
 
 ```groovy
 // then, with mavenLocal() in your repositories (note the plain com.github.lostrat group):
-implementation("com.github.lostrat:osmdroid-android:7.0.2-lostrat-SNAPSHOT")
-implementation("com.github.lostrat:osmdroid-mapsforge:7.0.2-lostrat-SNAPSHOT")
-implementation("com.github.lostrat:osmdroid-geopackage:7.0.2-lostrat-SNAPSHOT")
+implementation("com.github.lostrat:osmdroid-android:7.0.2-lostrat")
+implementation("com.github.lostrat:osmdroid-mapsforge:7.0.2-lostrat")
+implementation("com.github.lostrat:osmdroid-geopackage:7.0.2-lostrat")
 ```
 
-The [TestOsmdroidLostRat](https://github.com/LostRat/Test-Osmdroid-LostRat) app consumes the fork this way while a release is being prepared, then switches to the tag.
+The [TestOsmdroidLostRat](https://github.com/LostRat/Test-Osmdroid-LostRat) app consumes the fork
+from Maven Local while a release is being prepared, then switches to the tag.
 
-July 1, 2026 note — **tagged release** `v7.0.1-lostrat`:
+September 3, 2026 note — **tagged release** `v7.0.2-lostrat`:
 
-The `v7.0.1-lostrat` part is based on a git tag set for a specific commit.
+The `v7.0.2-lostrat` part is based on a git tag set for a specific commit.
+```groovy
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.2-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.2-lostrat")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.2-lostrat")
+```
+
+The JitPack build notes includes:
+```text
+✅ Build artifacts:
+com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-server-jdk:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-shape:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:OSMMapTilePackager:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.2-lostrat
+com.github.LostRat.osmdroid-lostrat:osmdroid-wms:v7.0.2-lostrat
+```
+
+July 1, 2026 — previous release `v7.0.1-lostrat`:
 ```groovy
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.1-lostrat")
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.1-lostrat")
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.1-lostrat")
 ```
 
-The JitPack build notes includes:
-```text
-✅ Build artifacts:
-com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:osmdroid-server-jdk:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:osmdroid-shape:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:osmdroid-geopackage:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:OSMMapTilePackager:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.1-lostrat
-com.github.LostRat.osmdroid-lostrat:osmdroid-wms:v7.0.1-lostrat
-```
-
-**Unreleased changes on `master`** (adds `MapsForgeTileCacheKeys` and fixes MapsForge tile cache read/write pairing, see `docs/CHANGELOG-lostrat.md`) can be pulled from JitPack ahead of the next tag:
-```groovy
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:master-SNAPSHOT")
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:master-SNAPSHOT")
-```
-
-November 27, 2025 — previous release `v7.0.0-lostrat`:
+November 27, 2025 — earlier release `v7.0.0-lostrat`:
 ```groovy
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.0-lostrat")
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:v7.0.0-lostrat")
