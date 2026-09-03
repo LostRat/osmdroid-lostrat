@@ -56,3 +56,8 @@ osmdroid-dist-*.zip
 .kiro/
 .vscode/
 /reference/local/
+
+# Per-user AI assistant instructions and editor settings; each contributor keeps their own
+CLAUDE.md
+GEMINI.md
+.editorconfig
