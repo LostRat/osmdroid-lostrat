@@ -20,7 +20,7 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 ### Build & tooling
 
-- Bump AGP to 9.3.1 and Gradle wrapper to 9.6.1
+- Bump AGP to 9.3.1 and Gradle wrapper to 9.6.1 (2026-08-01); then AGP 9.4.0, Gradle wrapper 9.7.1, and JUnit 6.1.3 (2026-09-03)
 
 ### Sample app
 
