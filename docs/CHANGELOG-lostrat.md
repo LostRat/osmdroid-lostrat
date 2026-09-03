@@ -3,13 +3,13 @@
 Changes specific to the [LostRat osmdroid fork](https://github.com/LostRat/osmdroid-lostrat).  
 Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repository root.
 
-**Release version:** `7.0.2-lostrat`
+**Current development version:** `7.0.3-lostrat-SNAPSHOT`
 
 **Latest tagged release:** `v7.0.2-lostrat`
 
 ---
 
-## [Unreleased]
+## [Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)
 
 ---
 

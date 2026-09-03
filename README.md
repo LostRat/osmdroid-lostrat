@@ -28,8 +28,8 @@ JitPack only serves three kinds of version, and the version string is **not** th
 | `<40-char commit hash>` or its short form | That exact commit. Useful to try a fix before it is tagged. |
 | `master-SNAPSHOT` | Latest push to `master`. Moves under you; JitPack may cache it for a day. |
 
-Local Maven builds use the `pom.version` from the checked-out commit. For the release tag, build it
-yourself with:
+There is no `7.0.3-lostrat-SNAPSHOT` on JitPack. That string is the in-repo `pom.version` and only
+exists in your **local** Maven repository after you build it yourself:
 
 ```bash
 ./gradlew clean build publishToMavenLocal
@@ -37,9 +37,9 @@ yourself with:
 
 ```groovy
 // then, with mavenLocal() in your repositories (note the plain com.github.lostrat group):
-implementation("com.github.lostrat:osmdroid-android:7.0.2-lostrat")
-implementation("com.github.lostrat:osmdroid-mapsforge:7.0.2-lostrat")
-implementation("com.github.lostrat:osmdroid-geopackage:7.0.2-lostrat")
+implementation("com.github.lostrat:osmdroid-android:7.0.3-lostrat-SNAPSHOT")
+implementation("com.github.lostrat:osmdroid-mapsforge:7.0.3-lostrat-SNAPSHOT")
+implementation("com.github.lostrat:osmdroid-geopackage:7.0.3-lostrat-SNAPSHOT")
 ```
 
 The [TestOsmdroidLostRat](https://github.com/LostRat/Test-Osmdroid-LostRat) app consumes the fork
