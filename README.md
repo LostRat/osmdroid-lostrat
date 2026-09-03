@@ -40,7 +40,7 @@ com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.1-lostrat
 com.github.LostRat.osmdroid-lostrat:osmdroid-wms:v7.0.1-lostrat
 ```
 
-**Current development version:**
+**Current development version** (adds `MapsForgeTileCacheKeys` and fixes MapsForge tile cache read/write pairing, see `docs/CHANGELOG-lostrat.md`):
 ```groovy
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.2-lostrat-SNAPSHOT")
 implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.2-lostrat-SNAPSHOT")
@@ -64,6 +64,8 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 | [docs/CHANGELOG-lostrat.md](docs/CHANGELOG-lostrat.md) | Fork-specific changelog (Markdown) |
 | [docs/CHANGELOG-lostrat.html](docs/CHANGELOG-lostrat.html) | Same changelog as HTML (readable in a browser) |
 | [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system |
+| [docs/2026-09-03-change-survey-and-commit-plan.html](docs/2026-09-03-change-survey-and-commit-plan.html) | Survey of unpushed 7.0.2 changes, untracked-file triage, and commit plan for the fork and the test app |
+| [reference/](reference/) | Session notes and reference code that is **not** compiled or maintained (see its README) |
 
 ### Interactive overlays (markers & polylines)
 

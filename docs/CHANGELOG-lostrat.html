@@ -37,6 +37,31 @@
   <hr>
 
   <h2>[Unreleased] — 7.0.2-lostrat-SNAPSHOT (in progress)</h2>
+
+  <h3>MapsForge</h3>
+  <ul>
+    <li>Add <code>MapsForgeTileCacheKeys</code>: stable tile-source names keyed by map files, theme, and the <em>render scale</em> actually applied (not raw display density), so tiles rendered at different scales never share a cache namespace (2026-08-01)</li>
+    <li>Fix <code>MapsForgeTileProvider</code> pairing the cache <em>reader</em> with the cache <em>writer</em>: the default <code>SqlTileWriter</code> is now read back through <code>MapTileSqlCacheProvider</code> instead of <code>MapTileFilesystemProvider</code>, so rendered tiles are actually reused from <code>cache.db</code></li>
+    <li>Add two-argument <code>MapsForgeTileProvider(receiver, tileSource)</code> constructor and <code>getTileWriter()</code> override</li>
+    <li><code>applyDensityScaling()</code> now checks <code>DisplayDensityManager.isInitialized()</code> instead of a null check</li>
+    <li>Samples sort map files and call <code>applyDensityScaling()</code> after <code>createInstance()</code></li>
+  </ul>
+
+  <h3>Build &amp; tooling</h3>
+  <ul>
+    <li>Bump AGP to 9.3.1 and Gradle wrapper to 9.6.1</li>
+  </ul>
+
+  <h3>Sample app</h3>
+  <ul>
+    <li>Add <code>SampleRotationListener</code> (Map Rotation Listener) demonstrating <code>CustomRotationOverlay</code> with a compass icon and <code>RotationGestureListener</code> / <code>RotationEvent</code> callbacks; replaces a stray example Activity that had been sitting in the library source set (2026-09-03)</li>
+  </ul>
+
+  <h3>Documentation</h3>
+  <ul>
+    <li>Document <code>MapsForgeTileCacheKeys</code> in <code>2025-11-27-Mapsforge-Density-Scaling.md</code></li>
+    <li>Add <a href="2026-09-03-change-survey-and-commit-plan.html">2026-09-03 change survey and commit plan</a></li>
+  </ul>
   <hr>
 
   <h2>[7.0.1-lostrat] — 2026-07-01</h2>

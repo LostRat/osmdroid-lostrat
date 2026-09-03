@@ -10,6 +10,27 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 ## [Unreleased] — 7.0.2-lostrat-SNAPSHOT (in progress)
 
+### MapsForge
+
+- Add `MapsForgeTileCacheKeys`: stable tile-source names keyed by map files, theme, and the *render scale* actually applied (not raw display density), so tiles rendered at different scales never share a cache namespace (2026-08-01)
+- Fix `MapsForgeTileProvider` pairing the cache *reader* with the cache *writer*: the default `SqlTileWriter` is now read back through `MapTileSqlCacheProvider` instead of `MapTileFilesystemProvider`, so rendered tiles are actually reused from `cache.db`
+- Add two-argument `MapsForgeTileProvider(receiver, tileSource)` constructor and `getTileWriter()` override
+- `applyDensityScaling()` now checks `DisplayDensityManager.isInitialized()` instead of a null check
+- Samples sort map files and call `applyDensityScaling()` after `createInstance()`
+
+### Build & tooling
+
+- Bump AGP to 9.3.1 and Gradle wrapper to 9.6.1
+
+### Sample app
+
+- Add `SampleRotationListener` (Map Rotation Listener) demonstrating `CustomRotationOverlay` with a compass icon and `RotationGestureListener` / `RotationEvent` callbacks; replaces a stray example Activity that had been sitting in the library source set (2026-09-03)
+
+### Documentation
+
+- Document `MapsForgeTileCacheKeys` in `2025-11-27-Mapsforge-Density-Scaling.md`
+- Add [2026-09-03 change survey and commit plan](2026-09-03-change-survey-and-commit-plan.html)
+
 ---
 
 ## [7.0.1-lostrat] — 2026-07-01

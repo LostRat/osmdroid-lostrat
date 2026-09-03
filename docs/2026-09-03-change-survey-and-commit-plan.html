@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026-09-03 Change Survey and Commit Plan (osmdroid-lostrat + test app)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1.25rem; }
+    h1 { border-bottom: 2px solid #8884; padding-bottom: 0.25rem; }
+    h2 { margin-top: 2rem; color: #2563eb; }
+    h3 { margin-top: 1.25rem; }
+    code { background: #8882; padding: 0.1em 0.35em; border-radius: 4px; }
+    pre { background: #8882; padding: 0.75rem; border-radius: 6px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+    th, td { border: 1px solid #8884; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+    th { background: #8882; }
+    .ok { color: #16a34a; font-weight: 600; }
+    .warn { color: #d97706; font-weight: 600; }
+    .bad { color: #dc2626; font-weight: 600; }
+    .meta { color: #666; font-size: 0.95rem; }
+    hr { border: none; border-top: 1px solid #8884; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Change Survey and Commit Plan</h1>
+  <p class="meta">Date: 2026-09-03. Repos surveyed: <code>F:\OSMDROID-LOSTRAT</code> (fork, branch <code>master</code>) and
+  <code>F:\ANDROIDPROJECT\TestOsmdroidLostRat</code> (test app, branch <code>main</code>). Nothing was pushed. One commit was made in the test app at the user's request (see section 6).</p>
+
+  <h2>1. Summary</h2>
+  <ul>
+    <li><strong>Fork:</strong> working tree has <em>no</em> modified tracked files. Three commits from 2026-08-01 are local only (not on <code>origin/master</code>). All 139 osmdroid-android unit tests and all osmdroid-mapsforge unit tests pass. <span class="ok">Ready to push after review below.</span></li>
+    <li><strong>Fork untracked:</strong> ~60 root-level notes, diffs, zips and jars that should not be committed as-is. The stray library Activity <code>RotationListenerExample.java</code> was <span class="ok">resolved 2026-09-03</span>: deleted from the library and rewritten as the sample fragment <code>SampleRotationListener</code> in OpenStreetMapViewer (registered in <code>SampleFactory</code>, compiles).</li>
+    <li><strong>Test app:</strong> 5 modified tracked files plus a large body of untracked source (route/replay experiments). Everything compiles. 360 unit tests run, <span class="warn">3 fail</span> in <code>ElderberryTrailIntegrationTest</code> (route_dev intersection extender), which is app-side work in progress, not an osmdroid problem.</li>
+    <li><strong>Version gap closed (2026-09-03, uncommitted):</strong> the test app now depends on <code>7.0.2-lostrat-SNAPSHOT</code> and its <code>MapsForgeTileCacheHelper</code> delegates to the fork's <code>MapsForgeTileCacheKeys</code> and the default <code>SqlTileWriter</code> path. It compiles; a device run is still needed to confirm cache hits.</li>
+  </ul>
+
+  <hr>
+  <h2>2. Fork: unpushed commits (2026-08-01)</h2>
+  <table>
+    <tr><th>Commit</th><th>Subject</th><th>Review</th></tr>
+    <tr><td><code>f6a533888</code></td><td>feat(mapsforge): key rendered tile caches by map, theme, and render scale</td>
+      <td><span class="ok">Looks correct.</span> Adds <code>MapsForgeTileCacheKeys</code> (+6 unit tests, passing). Fixes a real pre-existing bug in <code>MapsForgeTileProvider</code>: it always added <code>MapTileFilesystemProvider</code> as the cache reader even though the default writer is <code>SqlTileWriter</code>, so rendered tiles were written to <code>cache.db</code> but never read back. Now uses <code>MapTileProviderBasic.getMapTileFileStorageProviderBase()</code> to pair reader with writer. Also fixes <code>applyDensityScaling()</code> to use <code>DisplayDensityManager.isInitialized()</code> instead of a null check that could throw. Samples now sort map files and call <code>applyDensityScaling()</code> after <code>createInstance()</code>.</td></tr>
+    <tr><td><code>3afcab44a</code></td><td>build: bump AGP to 9.3.1 and Gradle wrapper to 9.6.1</td><td><span class="ok">Builds and tests pass with the wrapper.</span> Test app wrapper is also on 9.6.1.</td></tr>
+    <tr><td><code>e575aa1ec</code></td><td>docs: document MapsForgeTileCacheKeys and render-scale cache identity</td><td><span class="ok">Docs only</span> (<code>2025-11-27-Mapsforge-Density-Scaling.md</code>).</td></tr>
+  </table>
+
+  <h3>Design notes on <code>MapsForgeTileCacheKeys</code> (not bugs, but worth knowing)</h3>
+  <ul>
+    <li>The hash includes each map file's <strong>size and mtime</strong>. Every time a <code>.map</code> file is updated, a brand-new cache namespace is created and the old tiles stay in <code>cache.db</code> until osmdroid's normal expiry/trim runs. If maps are refreshed often, consider a one-off <code>SqlTileWriter.purgeCache(oldSourceName)</code> when the key changes.</li>
+    <li>Keys with the two-argument overloads depend on <code>DisplayDensityManager</code> being initialized <em>before</em> the key is built. The samples do this correctly (<code>createInstance()</code> then key, then <code>applyDensityScaling()</code>). If an app builds the key first, it silently gets <code>scale-100</code>.</li>
+    <li>Map order affects the hash (tested). The samples sort the file list first. Any caller must do the same or the key drifts between runs.</li>
+  </ul>
+
+  <h3>Spot review of the July 2026 (already released 7.0.1) commits</h3>
+  <ul>
+    <li><code>79cbb9652</code> OneFingerZoomOverlay: dispatch order in <code>MapView.onTouchEvent</code> is overlays first, then gesture detector, so the second-tap <code>ACTION_DOWN</code> reaches the overlay <em>before</em> <code>onDoubleTap()</code> sets the flag. The reset-on-DOWN path is therefore safe. No issue found.</li>
+    <li><code>8d78ad8ac</code> MapTileIndex / TileSystem: mask arithmetic and <code>1L &lt;&lt; zoom</code> fast path are correct for zoom 0..62. <code>mModuloMask</code> is computed once from <code>mMaxZoomLevel</code>; that was already true of the old <code>mModulo</code>, so no regression.</li>
+    <li><code>b163f0aa6</code> GeoPoint distance: subtract-then-convert ordering preserves precision. Fine.</li>
+  </ul>
+
+  <hr>
+  <h2>3. Fork: untracked files triage</h2>
+  <table>
+    <tr><th>Path</th><th>Verdict</th><th>Why</th></tr>
+    <tr><td><code>osmdroid-android/src/main/java/org/osmdroid/example/RotationListenerExample.java</code></td><td class="ok">Resolved</td><td>It was an <code>Activity</code> inside the <strong>library</strong> source set, so it compiled into the AAR every consumer gets. Deleted 2026-09-03 and replaced by <code>OpenStreetMapViewer/.../samplefragments/location/SampleRotationListener.java</code>, a <code>BaseSampleFragment</code> that shows <code>CustomRotationOverlay</code> driving a compass icon plus <code>RotationGestureListener</code> events, with rotate buttons for the programmatic path. Commit the new file together with the <code>SampleFactory</code> registration.</td></tr>
+    <tr><td><code>CLAUDE.md</code>, <code>GEMINI.md</code></td><td class="warn">Optional</td><td>Assistant instructions. <code>CLAUDE.md</code> is stale (says 6.1.22, MapsForge 0.25.0, Gradle 8). Refresh before committing or keep it local.</td></tr>
+    <tr><td><code>.editorconfig</code>, <code>.vscode/</code>, <code>.kiro/</code>, <code>.codex-tmp/</code></td><td class="warn">Editor/tool state</td><td><code>.editorconfig</code> is reasonable to commit. The three folders are now in <code>.gitignore</code>.</td></tr>
+    <tr><td><code>gemini/</code> (9 dated notes)</td><td class="ok">Moved 2026-09-03</td><td>Gemini CLI session notes, now <code>reference/notes/gemini/</code>, tracked.</td></tr>
+    <tr><td><code>bugreport.zip</code>, <code>classes.jar</code>, <code>*.txt</code> diffs, <code>*.diff</code></td><td class="ok">Moved 2026-09-03</td><td>Now under gitignored <code>reference/local/</code>. Delete at leisure; nothing links to them.</td></tr>
+    <tr><td><code>ProfileLines.java</code></td><td class="ok">Moved 2026-09-03</td><td>Snapshot from a private app, now under gitignored <code>reference/local/</code>. Private app code stays out of both repos.</td></tr>
+    <tr><td>~30 dated <code>*.md</code> session notes and <code>display-layer-optimization-report.html</code></td><td class="ok">Moved 2026-09-03</td><td>Now under <code>reference/notes/</code>, tracked, with <code>reference/README.md</code> explaining the convention. Commit as <code>docs(reference): keep session notes as reference material</code>.</td></tr>
+  </table>
+
+  <p>Suggested <code>.gitignore</code> additions for the fork:</p>
+<pre>.codex-tmp/
+.kiro/
+.vscode/
+/reference/local/</pre>
+  <p class="ok">Added to <code>.gitignore</code> 2026-09-03. The captured diffs and jars were moved into <code>reference/local/</code> instead of being ignored by pattern.</p>
+
+  <hr>
+  <h2>4. Test app: state and triage</h2>
+  <p>Branch is in sync with <code>origin/master</code> (last commit <code>4556158</code>, 2026-07-03). Depends on <code>com.github.lostrat:*:7.0.1-lostrat</code> from Maven Local. Compiles cleanly (main + unit tests).</p>
+
+  <h3>Modified tracked files (safe to commit together)</h3>
+  <ul>
+    <li><code>AndroidManifest.xml</code>: registers <code>.replay.GpxReplayActivity</code> and <code>.replay.GpxMapActivity</code>.</li>
+    <li><code>MainActivity.java</code>: adds a "replay" FAB that launches <code>GpxReplayActivity</code>.</li>
+    <li><code>activity_main.xml</code>, <code>colors.xml</code>, <code>strings.xml</code>: FAB, route colours, speed-multiplier array.</li>
+  </ul>
+  <p class="warn">These five files reference the untracked <code>replay</code> package, so they must be committed in the same commit as that package or the build breaks for anyone who clones.</p>
+
+  <h3>Untracked source that compiles and should be committed (grouped)</h3>
+  <table>
+    <tr><th>Package / folder</th><th>Files</th><th>Newest</th><th>Notes</th></tr>
+    <tr><td><code>app/src/main/java/com/pdxzone/routelib/</code> + tests</td><td>26 + 18</td><td>2026-02-12</td><td>Standalone route library. All its tests pass.</td></tr>
+    <tr><td><code>.../test_osmdroid_lostrat/replay/</code> + tests + 2 layouts</td><td>15 + 11</td><td>2026-07-08</td><td>GPX replay UI. Required by the modified tracked files.</td></tr>
+    <tr><td><code>.../test_osmdroid_lostrat/route_dev/</code> + tests</td><td>13 + 4</td><td>2026-02-11</td><td class="warn">3 failing tests in <code>ElderberryTrailIntegrationTest</code>: <code>IntersectionExtender</code> returns 49 of 55 way vertices (forward and reversed) and drops vertex 1 from the polyline. Commit as WIP or fix first.</td></tr>
+    <tr><td><code>.../test_osmdroid_lostrat/subsegment_graph/</code> + <code>docs/subsegment_graph/</code></td><td>8 + 6</td><td>2026-02-16</td><td>Compiles.</td></tr>
+    <tr><td><code>app/src/main/assets/tracks/tracks_YESTERDAY_20260207_...gpx</code></td><td>1 (758 KB)</td><td>2026-02-09</td><td>Test data. Fine to commit if you want it in the APK.</td></tr>
+    <tr><td><code>plans/</code>, <code>replay_notes/</code>, <code>route_dev/</code> (root), 26 root <code>*.md</code></td><td>-</td><td>Feb 2026</td><td><span class="ok">Moved 2026-09-03</span> into <code>reference/notes/</code>; <code>git_diff_*.txt</code> captures into gitignored <code>reference/local/</code>. Commit with the <code>reference/</code> README.</td></tr>
+  </table>
+
+  <h3>Untracked junk to delete or ignore (do not commit)</h3>
+  <table>
+    <tr><th>Path</th><th>Why</th></tr>
+    <tr><td><code>F:\ANDROIDPROJECT\TestOsmdroidLostRat\osmdroid-android\</code> (4,535 files, includes <code>build/</code>)</td><td>A stale copy of the fork's library module from 2025-09-29, copied in so early AI tools could see it. It is <em>not</em> in <code>settings.gradle.kts</code>, so it is unused, and it is older than the fork (missing the July 2026 perf and gesture changes). Delete it in Explorer. Both repos now have an <code>AGENTS.md</code> (2026-09-03) listing related projects by full path and telling assistants to flag copied-in code like this instead of relying on it.</td></tr>
+    <tr><td><code>replay.7z</code>, <code>replay (2).7z</code>, <code>route_dev.7z</code>, <code>route_dev (2).7z</code></td><td>Backup archives sitting inside the Java source tree.</td></tr>
+    <tr><td><code>app/src/main/route_spec/</code>, <code>app/src/main/route_spec_ui/</code> (48 files, ~520 KB)</td><td><span class="ok">Moved 2026-09-03</span> to gitignored <code>reference/local/</code>. They are snapshots from a private app, never on a source set, and must not be committed. New tracked <code>reference/</code> folder with a README. Commit as <code>docs(reference): add reference folder convention</code>.</td></tr>
+    <tr><td><code>app/.jqwik-database</code>, <code>.kiro/</code>, <code>.vscode/</code>, <code>git_diff_*.txt</code></td><td>Tool state and captured diffs. Add to <code>.gitignore</code>.</td></tr>
+  </table>
+
+  <p>Suggested <code>.gitignore</code> additions for the test app:</p>
+<pre>.jqwik-database
+.kiro/
+.vscode/
+/reference/local/</pre>
+  <p class="ok">Added to <code>.gitignore</code> 2026-09-03. The <code>.7z</code> archives and the stale <code>osmdroid-android/</code> copy are left for you to delete in Explorer rather than hidden by an ignore pattern.</p>
+
+  <hr>
+  <h2>5. Cross-repo gap: tile cache keys</h2>
+  <p>The test app's <code>MapsForgeTileCacheHelper</code> (committed 2026-07-03) works around the reader/writer mismatch by forcing a filesystem <code>TileWriter</code> and building a name from <code>DisplayMetrics.density</code>. The fork's <code>f6a533888</code> fixes the mismatch inside <code>MapsForgeTileProvider</code> and keys on the <em>render scale</em> instead. Once the test app moves to <code>7.0.2-lostrat-SNAPSHOT</code> (already in Maven Local, published 2026-08-01 07:51, which is after the commit), the helper can shrink to:</p>
+<pre>MapsForgeTileSource.createInstance(app);
+Arrays.sort(mapFiles);
+String name = MapsForgeTileCacheKeys.forMapsAndTheme(mapFiles, themeName);
+MapsForgeTileSource src = MapsForgeTileSource.createFromFiles(mapFiles, theme, name);
+src.applyDensityScaling();
+MapsForgeTileProvider provider = new MapsForgeTileProvider(receiver, src); // SqlTileWriter + matching reader</pre>
+  <p>Note the filesystem cache (<code>TileWriter</code>) and the SQL cache (<code>SqlTileWriter</code>) are separate stores. Switching the test app from one to the other will re-render tiles once.</p>
+  <p class="ok">Applied 2026-09-03 (uncommitted in the test app): <code>app/build.gradle.kts</code> now pins <code>7.0.2-lostrat-SNAPSHOT</code>; <code>MapsForgeTileCacheHelper</code> was rewritten to compute the app's render scale once, pass it to the three-argument <code>MapsForgeTileCacheKeys.forMapsAndTheme()</code>, and use the two-argument <code>MapsForgeTileProvider</code> constructor; <code>docs/mapsforge-tile-cache.md</code> was rewritten to match. <code>:app:compileDebugJavaWithJavac</code> passes.</p>
+
+  <hr>
+  <h2>6. Recommended commit sequence</h2>
+  <h3>Fork (<code>F:\OSMDROID-LOSTRAT</code>)</h3>
+  <ol>
+    <li><code>feat(sample): add SampleRotationListener demonstrating rotation listener and compass overlay</code> (new fragment + <code>SampleFactory</code> line). The library example file is already deleted.</li>
+    <li><code>docs(reference): keep session notes as reference material</code> (<code>reference/</code>, <code>.gitignore</code>). Delete the contents of <code>reference/local/</code> whenever you like.</li>
+    <li>Commit <code>docs/CHANGELOG-lostrat.{md,html}</code>, <code>README.md</code>, and this file as <code>docs: changelog for 7.0.2 snapshot, 2026-09-03 survey</code>.</li>
+    <li>Optionally commit the session notes and a refreshed <code>CLAUDE.md</code>.</li>
+    <li>Push the (then 4-5) local commits to <code>origin/master</code>.</li>
+  </ol>
+  <h3>Test app (<code>F:\ANDROIDPROJECT\TestOsmdroidLostRat</code>)</h3>
+  <ol>
+    <li>Delete <code>osmdroid-android/</code>, the four <code>.7z</code> files, and <code>route_spec*/</code>. Add the <code>.gitignore</code> patterns.</li>
+    <li><code>feat(routelib): add route library and tests</code>.</li>
+    <li><code>feat(replay): GPX replay activities, FAB, resources</code> (the 5 modified files + <code>replay/</code> + layouts + strings/colors).</li>
+    <li><code>wip(route_dev): intersection extender and subsegment graph</code> (note the 3 failing tests in the message, or fix first).</li>
+    <li><code>docs: route/replay design notes</code>.</li>
+    <li><span class="ok">Committed 2026-09-03 as <code>8f7c9f7</code></span>: <code>build(deps): use osmdroid-lostrat 7.0.2-SNAPSHOT and MapsForgeTileCacheKeys</code> (<code>app/build.gradle.kts</code>, <code>MapsForgeTileCacheHelper.java</code>, the one <code>MainActivity.java</code> comment hunk, <code>docs/mapsforge-tile-cache.md</code>). Not pushed. Still run the Portland offline map on a device to confirm tiles come back from <code>cache.db</code> after an activity restart.</li>
+  </ol>
+
+  <h2>7. Verification performed</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td><code>./gradlew :osmdroid-mapsforge:testDebugUnitTest</code> (fork)</td><td class="ok">pass</td></tr>
+    <tr><td><code>./gradlew :osmdroid-android:testDebugUnitTest</code> (fork)</td><td class="ok">139 tests, 0 failures</td></tr>
+    <tr><td><code>./gradlew :app:compileDebugJavaWithJavac :app:compileDebugUnitTestJavaWithJavac</code> (test app)</td><td class="ok">pass</td></tr>
+    <tr><td><code>./gradlew :app:testDebugUnitTest</code> (test app)</td><td class="warn">360 tests, 3 failures (ElderberryTrailIntegrationTest)</td></tr>
+  </table>
+</body>
+</html>
