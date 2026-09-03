@@ -31,3 +31,7 @@ layer-system guide). This folder is for the working material behind it.
   `ProfileLines.java` (private app snapshot), diff/log captures, `classes.jar`, and
   `bugreport.zip` into `local/`. Gemini CLI session notes
   (`gemini/*.md`, Sep-Dec 2025) moved to `notes/gemini/`.
+- 2026-09-03: promoted six notes that are real usage/behaviour documentation to `docs/`
+  (density scaling guide, layering tutorial, advanced polyline tutorial, 16 KB page size,
+  SqlTileWriter null safety, display-layer optimization report). What remains here is
+  session narrative, plans and analyses.

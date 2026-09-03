@@ -30,6 +30,7 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 - Document `MapsForgeTileCacheKeys` in `2025-11-27-Mapsforge-Density-Scaling.md`
 - Add [2026-09-03 change survey and commit plan](2026-09-03-change-survey-and-commit-plan.html)
+- Promote six usage/behaviour docs from the root notes into `docs/`: density scaling usage, layering system tutorial, advanced polyline tutorial, 16 KB page-size compliance, SqlTileWriter null safety, and the 2026-06-14 display-layer optimization report; remaining session notes live under `reference/notes/`
 
 ---
 

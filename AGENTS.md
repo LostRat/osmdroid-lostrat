@@ -37,6 +37,9 @@ Do not delete such folders yourself; list them with full paths and let the user 
 ## Other conventions
 
 - Never `git commit` or `git push`. Present a commit plan instead.
+- `docs/` is the curated documentation (see the table in `README.md`); read it before
+  changing the overlay layer system, density scaling, polyline colouring or the tile
+  cache. `reference/notes/` is uncurated session material and may be stale.
 - Complex work gets a dated HTML report under `docs/` plus an entry in
   `docs/CHANGELOG-lostrat.{md,html}` and, when user-facing, the fork section at the top
   of `README.md`.

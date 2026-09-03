@@ -63,7 +63,13 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 |----------|-------------|
 | [docs/CHANGELOG-lostrat.md](docs/CHANGELOG-lostrat.md) | Fork-specific changelog (Markdown) |
 | [docs/CHANGELOG-lostrat.html](docs/CHANGELOG-lostrat.html) | Same changelog as HTML (readable in a browser) |
-| [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system |
+| [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system (reference) |
+| [docs/LAYERING_SYSTEM_TUTORIAL.md](docs/LAYERING_SYSTEM_TUTORIAL.md) | Tutorial for the layer system: use cases, manual overrides, migration from stock osmdroid |
+| [docs/DENSITY_SCALING_USAGE.md](docs/DENSITY_SCALING_USAGE.md) | `DisplayDensityManager` and `applyDensityScaling()` usage guide for MapsForge and overlays |
+| [docs/ADVANCED_POLYLINE_TUTORIAL.md](docs/ADVANCED_POLYLINE_TUTORIAL.md) | Multi-colour polylines with the `ColorMapping*` classes (speed, elevation, ranges) |
+| [docs/16KB_PAGE_SIZE_COMPLIANCE.md](docs/16KB_PAGE_SIZE_COMPLIANCE.md) | Google Play 16 KB page-size requirement: what was changed and fallback options |
+| [docs/SQLTILEWRITER_NULL_SAFETY.md](docs/SQLTILEWRITER_NULL_SAFETY.md) | Why tile caching degrades gracefully instead of crashing when SQLite is unavailable |
+| [docs/2026-06-14-display-layer-optimization-report.html](docs/2026-06-14-display-layer-optimization-report.html) | Audit of the draw path (findings F1 to F6, which the June/July 2026 perf commits implement) |
 | [docs/2026-09-03-change-survey-and-commit-plan.html](docs/2026-09-03-change-survey-and-commit-plan.html) | Survey of unpushed 7.0.2 changes, untracked-file triage, and commit plan for the fork and the test app |
 | [reference/](reference/) | Session notes and reference code that is **not** compiled or maintained (see its README) |
 
