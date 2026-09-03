@@ -88,6 +88,7 @@ import org.osmdroid.samplefragments.location.SampleFollowMe;
 import org.osmdroid.samplefragments.location.SampleHeadingCompassUp;
 import org.osmdroid.samplefragments.location.SampleMyLocationWithClick;
 import org.osmdroid.samplefragments.location.SampleRotation;
+import org.osmdroid.samplefragments.location.SampleRotationListener;
 import org.osmdroid.samplefragments.milstd2525.Plotter;
 import org.osmdroid.samplefragments.tileproviders.MapsforgeTileProviderSample;
 import org.osmdroid.samplefragments.tileproviders.OfflinePickerSample;
@@ -316,6 +317,7 @@ public final class SampleFactory implements ISampleFactory {
         mSamples.add(SampleMapCenterOffset.class);
         mSamples.add(SampleSnappable.class);
         mSamples.add(SampleUnreachableOnlineTiles.class);
+        mSamples.add(SampleRotationListener.class);
     }
 
     public void addSample(Class<? extends BaseSampleFragment> clz) {
