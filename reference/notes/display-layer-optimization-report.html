@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>osmdroid Display Layer &mdash; Performance Optimization Report</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-dim: #1f6feb;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --code-bg: #1a2030;
+    --critical: #f85149;
+    --high: #e3b341;
+    --medium: #58a6ff;
+    --low: #3fb950;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #8b949e;
+    --typ: #79c0ff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  header {
+    padding: 3rem 2rem 2.5rem;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 60%, #1c2742 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  header .wrap { max-width: 1100px; margin: 0 auto; }
+  header h1 {
+    margin: 0 0 .5rem;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  header h1 .grad {
+    background: linear-gradient(90deg, #58a6ff, #79c0ff, #a5d6ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p.sub { margin: 0; color: var(--text-dim); font-size: 1.05rem; }
+  header .meta { margin-top: 1.2rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+  .pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .pill.v { color: var(--accent); border-color: var(--accent-dim); }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13,17,23,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: .6rem 2rem;
+  }
+  nav .wrap { max-width: 1100px; margin: 0 auto; display: flex; gap: 1.2rem; flex-wrap: wrap; }
+  nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: .85rem;
+    font-weight: 500;
+    transition: color .15s;
+  }
+  nav a:hover { color: var(--accent); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
+  section { margin-bottom: 3.5rem; scroll-margin-top: 60px; }
+  h2 {
+    font-size: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+  }
+  h2 .num {
+    font-size: .9rem;
+    color: var(--accent);
+    background: var(--surface-2);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    padding: 2px 9px;
+    font-weight: 700;
+  }
+  h3 { font-size: 1.15rem; margin: 0; }
+  h4 { font-size: .82rem; text-transform: uppercase; letter-spacing: .8px; color: var(--text-dim); margin: 1.2rem 0 .4rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1.3rem;
+  }
+
+  /* stat hero */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.3rem;
+    text-align: center;
+  }
+  .stat .big { font-size: 2.3rem; font-weight: 800; line-height: 1; }
+  .stat .lbl { color: var(--text-dim); font-size: .82rem; margin-top: .4rem; }
+  .stat.c .big { color: var(--critical); }
+  .stat.h .big { color: var(--high); }
+  .stat.m .big { color: var(--medium); }
+  .stat.g .big { color: var(--low); }
+
+  /* severity badges */
+  .sev {
+    display: inline-block;
+    padding: 3px 11px;
+    border-radius: 12px;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .sev.critical { background: rgba(248,81,73,.15); color: var(--critical); border: 1px solid rgba(248,81,73,.4); }
+  .sev.high { background: rgba(227,179,65,.15); color: var(--high); border: 1px solid rgba(227,179,65,.4); }
+  .sev.medium { background: rgba(88,166,255,.15); color: var(--medium); border: 1px solid rgba(88,166,255,.4); }
+  .sev.low { background: rgba(63,185,80,.15); color: var(--low); border: 1px solid rgba(63,185,80,.4); }
+
+  /* checklist */
+  .check { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: .5rem 1.5rem; }
+  .check li { padding-left: 1.8rem; position: relative; color: var(--text); }
+  .check li::before {
+    content: "\2713";
+    position: absolute; left: 0; top: 0;
+    color: var(--low); font-weight: 800;
+    background: rgba(63,185,80,.12);
+    width: 1.3rem; height: 1.3rem;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8rem;
+  }
+  .check li code { font-size: .85em; }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: .65rem .8rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); text-transform: uppercase; font-size: .72rem; letter-spacing: .6px; }
+  tbody tr:hover { background: var(--surface-2); }
+  td code { font-size: .82em; }
+  .yes { color: var(--low); font-weight: 700; }
+  .no { color: var(--text-dim); }
+  .imp { font-weight: 600; }
+  .imp.vhigh { color: var(--critical); }
+  .imp.high { color: var(--high); }
+  .imp.med { color: var(--medium); }
+  .imp.low { color: var(--text-dim); }
+
+  /* finding article */
+  .finding .head { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: .3rem; }
+  .finding .head h3 { flex: 1 1 auto; min-width: 200px; }
+  .fileref {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: .8rem;
+    color: var(--accent);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .finding p { margin: .4rem 0; }
+  .tag-id {
+    font-weight: 800;
+    color: var(--text-dim);
+    font-family: monospace;
+    margin-right: .3rem;
+  }
+
+  /* impact bars */
+  .bars { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: .8rem; }
+  .bar-item { font-size: .78rem; }
+  .bar-item .bl { color: var(--text-dim); display: block; margin-bottom: 3px; }
+  .track { width: 130px; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; }
+
+  /* code */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    margin: .5rem 0;
+    font-size: .82rem;
+    line-height: 1.55;
+  }
+  code, pre { font-family: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace; }
+  pre code { font-size: inherit; }
+  :not(pre) > code {
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: .85em;
+    color: #e6edf3;
+  }
+  .kw { color: var(--kw); }
+  .str { color: var(--str); }
+  .com { color: var(--com); font-style: italic; }
+  .typ { color: var(--typ); }
+  .ann { color: #d2a8ff; }
+
+  .codecols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .codecols .col h4 { margin-top: .4rem; }
+  .col.before h4 { color: var(--critical); }
+  .col.after h4 { color: var(--low); }
+  .col.before pre { border-left-color: var(--critical); }
+  .col.after pre { border-left-color: var(--low); }
+
+  .note {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: .7rem 1rem;
+    margin: .8rem 0 0;
+    font-size: .87rem;
+    color: var(--text-dim);
+  }
+  .note strong { color: var(--text); }
+
+  .group-head {
+    font-size: 1.15rem;
+    color: var(--accent);
+    margin: 2rem 0 1rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 1.5rem;
+    margin-bottom: 1rem;
+  }
+  details summary {
+    cursor: pointer;
+    padding: 1.1rem 0;
+    font-weight: 600;
+    font-size: 1.05rem;
+    list-style-position: inside;
+  }
+  details[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+  details .body { padding-bottom: 1.5rem; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: .82rem;
+  }
+  footer code { font-size: .9em; }
+
+  @media (max-width: 760px) {
+    .stats { grid-template-columns: repeat(2,1fr); }
+    .codecols { grid-template-columns: 1fr; }
+    .check { grid-template-columns: 1fr; }
+    table { font-size: .78rem; }
+  }
+  @media print {
+    body { background: #fff; color: #111; }
+    nav { display: none; }
+    .card, .stat, details, pre { border-color: #ccc; }
+    pre { background: #f6f8fa; color: #111; }
+    header { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1><span class="grad">osmdroid Display Layer</span><br>Performance Optimization Report</h1>
+    <p class="sub">Polyline rendering pipeline &amp; overlay manager audit &mdash; LostRat fork</p>
+    <div class="meta">
+      <span class="pill v">v6.1.22-lostrat-SNAPSHOT</span>
+      <span class="pill">Android API 23+</span>
+      <span class="pill">10 findings</span>
+      <span class="pill">Target: 600+ polylines @ 60fps</span>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="wrap">
+    <a href="#summary">Summary</a>
+    <a href="#existing">What's Working</a>
+    <a href="#matrix">Priority Matrix</a>
+    <a href="#findings">Findings</a>
+    <a href="#quickwins">Quick Wins</a>
+    <a href="#structural">Structural</a>
+    <a href="#architectural">Architectural</a>
+    <a href="#appendix">Appendix</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ============ 1. EXECUTIVE SUMMARY ============ -->
+<section id="summary">
+  <h2><span class="num">01</span> Executive Summary</h2>
+
+  <div class="stats">
+    <div class="stat c"><div class="big">2</div><div class="lbl">Critical &mdash; per-frame waste</div></div>
+    <div class="stat h"><div class="big">3</div><div class="lbl">High &mdash; per-polyline cost</div></div>
+    <div class="stat m"><div class="big">4</div><div class="lbl">Medium &mdash; structural</div></div>
+    <div class="stat g"><div class="big">6</div><div class="lbl">Quick wins (safe, isolated)</div></div>
+  </div>
+
+  <div class="card">
+    <p>This report audits the updated display layer system (the z-index layer ordering, spatial index, hierarchy visibility, and LRU hit-test caching that this fork adds) together with the underlying polyline drawing pipeline in <code>LinearRing</code>, <code>LineDrawer</code>, and <code>PolyOverlayWithIW</code>.</p>
+
+    <p>The existing infrastructure is solid: projection results are cached per point-set, bounding boxes are precomputed, off-screen overlays are culled before drawing, and hardware acceleration is in play. The findings below are <strong>targeted improvements layered on top of that foundation</strong> &mdash; not a rewrite.</p>
+
+    <p>Two themes dominate. First, <strong>redundant per-frame work in the overlay draw loop</strong>: <code>DefaultOverlayManager.drawWithLayers()</code> re-sorts a fixed 10-value enum and re-scans the full overlay list on every single frame. Second, and more impactful at scale, <strong>per-polyline object allocation</strong>: <code>LinearRing.clipAndStore()</code> allocates fresh <code>PointL</code> objects on every draw. At 600 polylines &times; 60 fps that is on the order of <strong>100,000+ short-lived allocations per second</strong>, directly driving the GC pauses that show up as scroll/zoom jank.</p>
+
+    <p>The six "quick wins" are isolated, low-risk changes with no behavioral side effects and can ship together in a single PR. The remaining structural and architectural items deliver further gains but warrant their own review.</p>
+  </div>
+</section>
+
+<!-- ============ 2. EXISTING OPTIMIZATIONS ============ -->
+<section id="existing">
+  <h2><span class="num">02</span> What's Already Working</h2>
+  <div class="card">
+    <p style="margin-top:0">The pipeline already implements a strong set of optimizations. These should be preserved &mdash; the recommendations that follow build on them.</p>
+    <ul class="check">
+      <li><code>mProjectedPrecomputed</code> flag &mdash; GeoPoint&rarr;Mercator conversion cached per point-set</li>
+      <li><code>BoundingBox</code> precomputed once in <code>computeProjected()</code></li>
+      <li>Spatial index grid (256&nbsp;px cells) with adaptive threshold for tap detection</li>
+      <li><code>isVisible()</code> circle-overlap viewport cull before drawing</li>
+      <li><code>SideOptimizationPointAccepter</code> &mdash; removes same-X / same-Y collinear points</li>
+      <li><code>compact()</code> in <code>LineDrawer</code> &mdash; drops degenerate zero-length segments</li>
+      <li>Hardware acceleration via <code>MapView.setLayerType</code></li>
+      <li>LRU hit-test cache (<code>sHitTestCache</code>) in <code>PolyOverlayWithIW</code></li>
+      <li>Pre-allocated <code>mVisibility*</code> scratch fields (no allocation in <code>isVisible</code>)</li>
+      <li><code>drawWithLines()</code> batches segments into one <code>Canvas.drawLines()</code> call</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 3. PRIORITY MATRIX ============ -->
+<section id="matrix">
+  <h2><span class="num">03</span> Priority Matrix</h2>
+  <div class="card" style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Finding</th><th>File</th><th>Severity</th><th>Effort</th>
+          <th>Frame CPU</th><th>GC Pressure</th><th>Quick Win</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>F1</td><td>Cache sorted <code>OverlayLayer[]</code></td><td>DefaultOverlayManager</td>
+          <td><span class="sev critical">Critical</span></td><td>Trivial</td>
+          <td class="imp high">High</td><td class="imp low">Low</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F2</td><td>Pre-allocate <code>PointL</code> in <code>clipAndStore</code></td><td>LinearRing</td>
+          <td><span class="sev critical">Critical</span></td><td>Low</td>
+          <td class="imp med">Medium</td><td class="imp vhigh">Very High</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F3</td><td>Pre-allocate offset in <code>buildLinePortion</code></td><td>LinearRing</td>
+          <td><span class="sev high">High</span></td><td>Trivial</td>
+          <td class="imp low">Low</td><td class="imp high">High</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F4</td><td><code>mHasUnassignedOverlays</code> guard for fallback loop</td><td>DefaultOverlayManager</td>
+          <td><span class="sev high">High</span></td><td>Low</td>
+          <td class="imp high">High</td><td class="imp low">None</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F5</td><td>Cache <code>MonochromaticPaintList</code> wrapper</td><td>LineDrawer</td>
+          <td><span class="sev high">High</span></td><td>Low</td>
+          <td class="imp low">Low</td><td class="imp med">Medium</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F6</td><td>Hoist <code>screenRadius</code> out of <code>isVisible</code></td><td>PolyOverlayWithIW</td>
+          <td><span class="sev medium">Medium</span></td><td>Low</td>
+          <td class="imp med">Medium</td><td class="imp low">None</td><td class="yes">&#10003;</td>
+        </tr>
+        <tr>
+          <td>F7</td><td>Swap <code>ConcurrentHashMap</code>/<code>COWList</code> for UI-thread containers</td><td>DefaultOverlayManager</td>
+          <td><span class="sev medium">Medium</span></td><td>Medium</td>
+          <td class="imp med">Medium</td><td class="imp low">Low</td><td class="no">&mdash;</td>
+        </tr>
+        <tr>
+          <td>F8</td><td>Cache <code>isHierarchyEnabled()</code> result</td><td>Overlay</td>
+          <td><span class="sev medium">Medium</span></td><td>Medium</td>
+          <td class="imp low">Low</td><td class="imp low">None</td><td class="no">&mdash;</td>
+        </tr>
+        <tr>
+          <td>F9</td><td>Cache <code>isVisible()</code> by projection version</td><td>PolyOverlayWithIW</td>
+          <td><span class="sev medium">Medium</span></td><td>Medium</td>
+          <td class="imp med">Medium</td><td class="imp low">None</td><td class="no">&mdash;</td>
+        </tr>
+        <tr>
+          <td>F10</td><td>Zoom-aware (Douglas&ndash;Peucker) simplification</td><td>LinearRing / util</td>
+          <td><span class="sev low">Low / Arch</span></td><td>High</td>
+          <td class="imp vhigh">Very High*</td><td class="imp high">High</td><td class="no">&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:1rem">* F10's impact is conditional &mdash; dramatic for dense tracks (10k+ points) viewed zoomed out, negligible for short polylines.</p>
+  </div>
+</section>
+
+<!-- ============ 4. FINDINGS ============ -->
+<section id="findings">
+  <h2><span class="num">04</span> Findings In Detail</h2>
+
+  <!-- F1 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev critical">Critical</span>
+      <h3><span class="tag-id">F1</span>Redundant enum sort on every draw frame</h3>
+      <span class="fileref">DefaultOverlayManager.java : 285&ndash;286</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>drawWithLayers()</code> runs <code>OverlayLayer.values()</code> &mdash; which allocates a fresh array &mdash; then <code>Arrays.sort()</code> with a comparator lambda, on <strong>every frame</strong>.</p>
+    <h4>Root Cause</h4>
+    <p><code>OverlayLayer</code> is a fixed enum of 10 values whose z-index ordering never changes at runtime. The array allocation and comparison-based sort produce an identical result every time, yet the work (plus a comparator object) is repeated 60&times;/second.</p>
+    <h4>Estimated Impact</h4>
+    <p>Eliminates a per-frame array allocation, a sort, and a lambda allocation. Small CPU saving but trivially free; removes constant minor GC churn.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:65%;background:var(--high)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:25%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:8%;background:var(--low)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F2 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev critical">Critical</span>
+      <h3><span class="tag-id">F2</span>Per-draw <code>PointL</code> allocation in <code>clipAndStore()</code></h3>
+      <span class="fileref">LinearRing.java : 377&ndash;379</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>clipAndStore()</code> declares three <code>new PointL()</code> objects (<code>projected</code>, <code>point</code>, <code>first</code>) as method-locals. This method runs once per polyline per draw, inside the hot path of both <code>drawWithLines()</code> and <code>drawWithPath()</code>.</p>
+    <h4>Root Cause</h4>
+    <p><code>LinearRing</code> is a long-lived object, but these scratch points are recreated each draw. At 600 polylines &times; 60 fps that is ~108,000 allocations/second from this method alone &mdash; the dominant source of GC pressure in polyline-heavy maps.</p>
+    <h4>Estimated Impact</h4>
+    <p>Removes the single largest allocation hotspot. Directly reduces GC pause frequency, the primary cause of visible scroll/zoom stutter.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:50%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:95%;background:var(--critical)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:22%;background:var(--low)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F3 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev high">High</span>
+      <h3><span class="tag-id">F3</span>Per-draw offset allocation in <code>buildLinePortion()</code></h3>
+      <span class="fileref">LinearRing.java : 276</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>buildLinePortion()</code> allocates <code>final PointL offset = new PointL()</code> on each call &mdash; once per polyline per frame.</p>
+    <h4>Root Cause</h4>
+    <p>Same lifetime mismatch as F2: a transient allocation inside a long-lived object's hot path. Note <code>buildPathPortion()</code> already conditionally avoids this when an offset is passed in, but the polyline (lines) path does not.</p>
+    <h4>Estimated Impact</h4>
+    <p>One fewer allocation per polyline per frame; compounds with F2 to cut GC churn.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:18%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:60%;background:var(--high)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:6%;background:var(--low)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F4 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev high">High</span>
+      <h3><span class="tag-id">F4</span>Unconditional full-list fallback scan every frame</h3>
+      <span class="fileref">DefaultOverlayManager.java : 306&ndash;314</span>
+    </div>
+    <h4>Description</h4>
+    <p>After drawing all layers, a fallback loop iterates the <em>entire</em> <code>mOverlayList</code> and calls <code>mOverlayToLayer.containsKey(overlay)</code> for each, to catch overlays not assigned to a layer.</p>
+    <h4>Root Cause</h4>
+    <p>In the common case every overlay <em>is</em> assigned to a layer (assignment is automatic in <code>add()</code>), so this loop performs N map lookups every frame and draws nothing. The work scales linearly with overlay count and is pure waste when no unassigned overlays exist.</p>
+    <h4>Estimated Impact</h4>
+    <p>Eliminates O(n) hash lookups per frame for the typical configuration. Meaningful with hundreds of overlays.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:70%;background:var(--high)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:10%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:25%;background:var(--low)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F5 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev high">High</span>
+      <h3><span class="tag-id">F5</span><code>MonochromaticPaintList</code> wrapper allocated per <code>setPaint</code></h3>
+      <span class="fileref">LineDrawer.java : 30&ndash;32</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>setPaint(Paint)</code> unconditionally constructs <code>new MonochromaticPaintList(pPaint)</code>. It is invoked from <code>drawWithLines()</code> for every monochromatic polyline, every frame.</p>
+    <h4>Root Cause</h4>
+    <p>No reuse: even when the same <code>Paint</code> instance is passed repeatedly, a new wrapper object is created. For 600 polylines that is 600 wrapper allocations per frame.</p>
+    <h4>Estimated Impact</h4>
+    <p>Reduces wrapper allocations to near-zero via identity check. Modest GC benefit, very low risk.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:15%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:45%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:18%;background:var(--low)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F6 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev medium">Medium</span>
+      <h3><span class="tag-id">F6</span><code>screenRadius</code> recomputed per polyline in <code>isVisible()</code></h3>
+      <span class="fileref">PolyOverlayWithIW.java : 285&ndash;289</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>isVisible()</code> computes <code>screenRadius</code> with <code>Math.sqrt()</code> from the projection width/height for <em>every</em> polyline.</p>
+    <h4>Root Cause</h4>
+    <p><code>screenRadius</code> depends only on the projection's dimensions, which are constant across all overlays within a single frame. Computing it per-polyline repeats the same <code>sqrt</code> 600 times per frame. (The polyline-specific <code>radius</code> and <code>distanceBetweenCenters</code> still vary and must stay per-polyline.)</p>
+    <h4>Estimated Impact</h4>
+    <p>Removes hundreds of redundant <code>Math.sqrt</code> calls per frame. Best realized by computing once per frame and passing it down.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:48%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:5%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:30%;background:var(--medium)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F7 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev medium">Medium</span>
+      <h3><span class="tag-id">F7</span>Thread-safe containers for UI-thread-only data</h3>
+      <span class="fileref">DefaultOverlayManager.java : 89&ndash;90, 102</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>mLayeredOverlays</code> and <code>mOverlayToLayer</code> are <code>ConcurrentHashMap</code>; each per-layer list is a <code>CopyOnWriteArrayList</code>.</p>
+    <h4>Root Cause</h4>
+    <p>Overlay add/remove and drawing both occur on the UI thread. <code>ConcurrentHashMap</code> carries synchronization overhead, and <code>CopyOnWriteArrayList</code> copies its entire backing array on every mutation &mdash; expensive if overlays are added in bulk. <code>ArrayMap</code> + <code>ArrayList</code> are faster for this access pattern.</p>
+    <h4>Estimated Impact</h4>
+    <p>Lower per-mutation cost and read overhead. <strong>Requires verifying no off-UI-thread mutation</strong> before changing &mdash; hence not a quick win.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:40%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:35%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:55%;background:var(--high)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F8 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev medium">Medium</span>
+      <h3><span class="tag-id">F8</span>Recursive parent walk in <code>isHierarchyEnabled()</code></h3>
+      <span class="fileref">Overlay.java : 166&ndash;174 (called DefaultOverlayManager : 295)</span>
+    </div>
+    <h4>Description</h4>
+    <p><code>isHierarchyEnabled()</code> walks the parent chain on every draw, per overlay, to check whether the overlay or any ancestor is disabled.</p>
+    <h4>Root Cause</h4>
+    <p>Enabled state changes rarely, but the chain is re-walked every frame. A cached flag invalidated on <code>setEnabled()</code> / <code>setParent()</code> would make the check O(1).</p>
+    <h4>Estimated Impact</h4>
+    <p>Small for shallow hierarchies; grows with nesting depth of <code>FolderOverlay</code>s. Requires careful cache invalidation.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:22%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:5%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:55%;background:var(--high)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F9 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev medium">Medium</span>
+      <h3><span class="tag-id">F9</span><code>isVisible()</code> recomputed when nothing changed</h3>
+      <span class="fileref">PolyOverlayWithIW.java : 261&ndash;290</span>
+    </div>
+    <h4>Description</h4>
+    <p>The full projection-and-distance visibility math runs every frame even when neither the polyline's bounds nor the projection have changed (e.g. a static map awaiting an unrelated overlay's animation).</p>
+    <h4>Root Cause</h4>
+    <p>No memoization keyed on projection identity/version. A stored result plus a projection version stamp would skip the recompute on idle frames.</p>
+    <h4>Estimated Impact</h4>
+    <p>Saves the visibility math on frames with no viewport change. Needs a reliable projection version token (see F6 plumbing).</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:42%;background:var(--medium)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:5%;background:var(--low)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:50%;background:var(--high)"></div></div></div>
+    </div>
+  </article>
+
+  <!-- F10 -->
+  <article class="card finding">
+    <div class="head">
+      <span class="sev low">Low / Architectural</span>
+      <h3><span class="tag-id">F10</span>No distance-based simplification at low zoom</h3>
+      <span class="fileref">SideOptimizationPointAccepter.java / LinearRing</span>
+    </div>
+    <h4>Description</h4>
+    <p>The only point reduction is <code>SideOptimizationPointAccepter</code>, which collapses runs of identical-X or identical-Y points after clipping. There is no zoom-aware geometric simplification.</p>
+    <h4>Root Cause</h4>
+    <p>At low zoom, many distinct geographic points project within a single pixel of one another. They survive clipping and are each fed to <code>drawLines</code>/<code>Path</code>. A 10,000-point GPS track at zoom 10 may render hundreds of points that contribute nothing visible.</p>
+    <h4>Estimated Impact</h4>
+    <p>For dense tracks viewed zoomed-out, a Ramer&ndash;Douglas&ndash;Peucker (or greedy 1-px epsilon) pass can cut path length 90%+. Negligible for short polylines. Behavioral change to rendering fidelity &mdash; must be zoom-gated and opt-in.</p>
+    <div class="bars">
+      <div class="bar-item"><span class="bl">Frame CPU</span><div class="track"><div class="fill" style="width:90%;background:var(--critical)"></div></div></div>
+      <div class="bar-item"><span class="bl">GC pressure</span><div class="track"><div class="fill" style="width:55%;background:var(--high)"></div></div></div>
+      <div class="bar-item"><span class="bl">Effort</span><div class="track"><div class="fill" style="width:85%;background:var(--critical)"></div></div></div>
+    </div>
+  </article>
+</section>
+
+<!-- ============ 5. QUICK WINS ============ -->
+<section id="quickwins">
+  <h2><span class="num">05</span> Recommended Fixes &mdash; Quick Wins</h2>
+  <p>These six changes are isolated, behavior-preserving, and low-risk. They can ship together in one PR.</p>
+
+  <!-- Fix 1 -->
+  <h3 class="group-head">F1 &mdash; Cache the sorted layer array</h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="com">// drawWithLayers(), runs every frame</span>
+<span class="typ">OverlayLayer</span>[] layers = OverlayLayer.values();
+Arrays.sort(layers,
+  (a, b) -&gt; Integer.compare(a.getZIndex(), b.getZIndex()));
+<span class="kw">for</span> (<span class="typ">OverlayLayer</span> layer : layers) { ... }</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="com">// class-level, sorted once at load time</span>
+<span class="kw">private static final</span> <span class="typ">OverlayLayer</span>[] SORTED_LAYERS;
+<span class="kw">static</span> {
+    SORTED_LAYERS = OverlayLayer.values();
+    Arrays.sort(SORTED_LAYERS,
+      (a, b) -&gt; Integer.compare(a.getZIndex(), b.getZIndex()));
+}
+<span class="com">// drawWithLayers():</span>
+<span class="kw">for</span> (<span class="typ">OverlayLayer</span> layer : SORTED_LAYERS) { ... }</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Safe:</strong> enum values and their z-index are immutable, so the sorted order is deterministic and identical every frame.</p>
+  </div>
+
+  <!-- Fix 2 -->
+  <h3 class="group-head">F2 &mdash; Promote <code>clipAndStore</code> scratch points to fields</h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="kw">private void</span> clipAndStore(...) {
+    ...
+    <span class="kw">final</span> <span class="typ">PointL</span> projected = <span class="kw">new</span> <span class="typ">PointL</span>();
+    <span class="kw">final</span> <span class="typ">PointL</span> point     = <span class="kw">new</span> <span class="typ">PointL</span>();
+    <span class="kw">final</span> <span class="typ">PointL</span> first     = <span class="kw">new</span> <span class="typ">PointL</span>();
+    <span class="kw">for</span> (...) {
+        projected.set(...);
+        ...
+    }
+}</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="com">// reused instance fields on LinearRing</span>
+<span class="kw">private final</span> <span class="typ">PointL</span> mClipProjected = <span class="kw">new</span> <span class="typ">PointL</span>();
+<span class="kw">private final</span> <span class="typ">PointL</span> mClipPoint     = <span class="kw">new</span> <span class="typ">PointL</span>();
+<span class="kw">private final</span> <span class="typ">PointL</span> mClipFirst     = <span class="kw">new</span> <span class="typ">PointL</span>();
+
+<span class="kw">private void</span> clipAndStore(...) {
+    <span class="kw">for</span> (...) {
+        mClipProjected.set(...);
+        ...
+    }
+}</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Safe:</strong> <code>PointL</code> is a mutable value holder used only within the synchronous draw call; promoting to fields just reuses the buffer. <code>clipAndStore</code> is never re-entrant on a single <code>LinearRing</code>. <strong>Highest-value fix in the report.</strong></p>
+  </div>
+
+  <!-- Fix 3 -->
+  <h3 class="group-head">F3 &mdash; Reuse the offset point in <code>buildLinePortion</code></h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="kw">void</span> buildLinePortion(<span class="typ">Projection</span> p, <span class="kw">boolean</span> store) {
+    ...
+    <span class="kw">final</span> <span class="typ">PointL</span> offset = <span class="kw">new</span> <span class="typ">PointL</span>();
+    getBestOffset(p, offset);
+    ...
+}</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="kw">private final</span> <span class="typ">PointL</span> mBuildOffset = <span class="kw">new</span> <span class="typ">PointL</span>();
+
+<span class="kw">void</span> buildLinePortion(<span class="typ">Projection</span> p, <span class="kw">boolean</span> store) {
+    ...
+    mBuildOffset.set(<span class="str">0</span>, <span class="str">0</span>);
+    getBestOffset(p, mBuildOffset);
+    ...
+}</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Safe:</strong> same rationale as F2 &mdash; single synchronous use per draw.</p>
+  </div>
+
+  <!-- Fix 4 -->
+  <h3 class="group-head">F4 &mdash; Guard the fallback loop with a flag</h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="com">// end of drawWithLayers() &mdash; every frame</span>
+<span class="kw">for</span> (<span class="kw">final</span> <span class="typ">Overlay</span> overlay : mOverlayList) {
+    <span class="kw">if</span> (overlay != <span class="kw">null</span> &amp;&amp; overlay.isEnabled()
+        &amp;&amp; !mOverlayToLayer.containsKey(overlay)) {
+        ...draw...
+    }
+}</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="kw">private boolean</span> mHasUnassignedOverlays = <span class="kw">false</span>;
+<span class="com">// set true in add() when an overlay isn't layer-assigned;</span>
+<span class="com">// recompute on remove()</span>
+
+<span class="kw">if</span> (mHasUnassignedOverlays) {
+    <span class="kw">for</span> (<span class="kw">final</span> <span class="typ">Overlay</span> overlay : mOverlayList) {
+        <span class="kw">if</span> (overlay != <span class="kw">null</span> &amp;&amp; overlay.isEnabled()
+            &amp;&amp; !mOverlayToLayer.containsKey(overlay)) {
+            ...draw...
+        }
+    }
+}</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Note:</strong> keep the flag in sync wherever overlays are added/removed/assigned. If assignment is always automatic, the flag stays <code>false</code> and the loop is skipped entirely.</p>
+  </div>
+
+  <!-- Fix 5 -->
+  <h3 class="group-head">F5 &mdash; Cache the paint-list wrapper by identity</h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="kw">public void</span> setPaint(<span class="kw">final</span> <span class="typ">Paint</span> pPaint) {
+    setPaint(<span class="kw">new</span> <span class="typ">MonochromaticPaintList</span>(pPaint));
+}</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="kw">private</span> <span class="typ">Paint</span> mCachedPaint;
+<span class="kw">private</span> <span class="typ">MonochromaticPaintList</span> mCachedPaintList;
+
+<span class="kw">public void</span> setPaint(<span class="kw">final</span> <span class="typ">Paint</span> pPaint) {
+    <span class="kw">if</span> (pPaint != mCachedPaint) {
+        mCachedPaint = pPaint;
+        mCachedPaintList = <span class="kw">new</span> <span class="typ">MonochromaticPaintList</span>(pPaint);
+    }
+    setPaint(mCachedPaintList);
+}</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Safe:</strong> identity (<code>!=</code>) comparison; if a caller mutates a <code>Paint</code> in place without swapping the reference, the wrapper still points at the same live <code>Paint</code>, so rendering stays correct.</p>
+  </div>
+
+  <!-- Fix 6 -->
+  <h3 class="group-head">F6 &mdash; Compute <code>screenRadius</code> once per frame</h3>
+  <div class="card">
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="kw">private boolean</span> isVisible(<span class="typ">Projection</span> p) {
+    ...
+    <span class="kw">final double</span> screenRadius = Math.sqrt(
+        Distance.getSquaredDistanceToPoint(
+            <span class="str">0</span>, <span class="str">0</span>, screenCenterX, screenCenterY));
+    <span class="kw">return</span> distanceBetweenCenters &lt;= radius + screenRadius;
+}
+<span class="com">// called per-polyline in draw()</span></code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="kw">private boolean</span> isVisible(<span class="typ">Projection</span> p, <span class="kw">double</span> screenRadius) {
+    ...
+    <span class="kw">return</span> distanceBetweenCenters &lt;= radius + screenRadius;
+}
+
+<span class="com">// in draw(), compute once before the polyline loop:</span>
+<span class="kw">final double</span> screenRadius = Math.sqrt(
+    Distance.getSquaredDistanceToPoint(
+        <span class="str">0</span>, <span class="str">0</span>, p.getWidth() / <span class="str">2</span>, p.getHeight() / <span class="str">2</span>));</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Note:</strong> since <code>draw()</code> is called per-overlay by the manager, the cleanest realization is to cache <code>screenRadius</code> on the projection (or a per-frame holder) keyed by its version, so each overlay reuses it. Keep <code>radius</code> and <code>distanceBetweenCenters</code> per-polyline.</p>
+  </div>
+</section>
+
+<!-- ============ 6. STRUCTURAL ============ -->
+<section id="structural">
+  <h2><span class="num">06</span> Recommended Fixes &mdash; Structural</h2>
+  <p>Higher value or wider blast radius; each deserves its own review and thread-safety audit.</p>
+
+  <div class="card">
+    <h3><span class="tag-id">F7</span>Right-size the overlay containers</h3>
+    <div class="codecols">
+      <div class="col before">
+        <h4>Before</h4>
+<pre><code><span class="kw">new</span> <span class="typ">ConcurrentHashMap</span>&lt;OverlayLayer, List&lt;Overlay&gt;&gt;();
+<span class="kw">new</span> <span class="typ">ConcurrentHashMap</span>&lt;Overlay, OverlayLayer&gt;();
+<span class="com">// per layer:</span>
+<span class="kw">new</span> <span class="typ">CopyOnWriteArrayList</span>&lt;&gt;();</code></pre>
+      </div>
+      <div class="col after">
+        <h4>After</h4>
+<pre><code><span class="kw">new</span> <span class="typ">ArrayMap</span>&lt;OverlayLayer, List&lt;Overlay&gt;&gt;();
+<span class="kw">new</span> <span class="typ">ArrayMap</span>&lt;Overlay, OverlayLayer&gt;();
+<span class="com">// per layer:</span>
+<span class="kw">new</span> <span class="typ">ArrayList</span>&lt;&gt;();</code></pre>
+      </div>
+    </div>
+    <p class="note"><strong>Prerequisite:</strong> confirm all overlay add/remove and draw operations happen on the UI thread. If any background mutation exists, keep concurrent structures or synchronize explicitly. The main <code>mOverlayList</code> may need to stay <code>CopyOnWriteArrayList</code> if iterated during async tile callbacks.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="tag-id">F8</span>Cache <code>isHierarchyEnabled()</code></h3>
+    <p>Add a <code>boolean mCachedHierarchyEnabled</code> (and a dirty flag) to <code>Overlay</code>. Recompute lazily only when <code>setEnabled()</code> or <code>setParent()</code> is called on the overlay or an ancestor. Because children hold a parent reference, invalidation must propagate downward &mdash; simplest is a monotonically increasing "structure version" on the manager that each overlay compares against, recomputing on mismatch.</p>
+    <p class="note"><strong>Risk:</strong> cache-invalidation bugs cause overlays to wrongly appear/disappear. Add unit tests for nested <code>FolderOverlay</code> enable/disable before merging.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="tag-id">F9</span>Memoize <code>isVisible()</code> by projection version</h3>
+    <p>Store <code>mLastVisibleProjectionVersion</code> and <code>mLastVisibleResult</code> on <code>PolyOverlayWithIW</code>. Skip the recompute when the projection version matches and the polyline's points are unchanged. This pairs naturally with the per-frame <code>screenRadius</code> plumbing from F6 and with MapView's existing projection-versioning infrastructure (<code>mProjectionVersion</code>).</p>
+    <p class="note"><strong>Risk:</strong> requires a trustworthy projection version that bumps on <em>any</em> viewport change (scroll, zoom, rotation, size). Reuse MapView's existing version counter rather than inventing a new one.</p>
+  </div>
+</section>
+
+<!-- ============ 7. ARCHITECTURAL ============ -->
+<section id="architectural">
+  <h2><span class="num">07</span> Architectural Recommendation</h2>
+  <div class="card">
+    <h3><span class="tag-id">F10</span>Zoom-aware point simplification (Douglas&ndash;Peucker)</h3>
+    <p>The current chain only removes axis-aligned collinear points. It does not address the dominant cost for dense tracks at low zoom: many points projecting within a pixel of each other.</p>
+
+    <h4>Proposed Approach</h4>
+    <p>Introduce a composable <code>ZoomSimplificationPointAccepter</code> that wraps the existing <code>SideOptimizationPointAccepter</code> in the accepter chain used by <code>LinearRing.clipAndStore()</code>. It computes a pixel-distance epsilon from the current zoom and discards intermediate points whose screen distance to the last accepted point falls below it. Start with a cheap greedy 1-px pass; upgrade to full Ramer&ndash;Douglas&ndash;Peucker if fidelity demands it.</p>
+
+<pre><code><span class="com">// Sketch &mdash; greedy epsilon accepter in the org.osmdroid.util chain</span>
+<span class="kw">public class</span> <span class="typ">ZoomSimplificationPointAccepter</span> <span class="kw">implements</span> <span class="typ">PointAccepter</span> {
+    <span class="kw">private final</span> <span class="typ">PointAccepter</span> mNext;     <span class="com">// e.g. SideOptimization...</span>
+    <span class="kw">private final double</span> mEpsilonSq;        <span class="com">// (pixels)^2, from zoom</span>
+    <span class="kw">private long</span> mLastX, mLastY;
+    <span class="kw">private boolean</span> mHasLast;
+
+    <span class="ann">@Override</span> <span class="kw">public void</span> add(<span class="kw">long</span> x, <span class="kw">long</span> y) {
+        <span class="kw">if</span> (mHasLast) {
+            <span class="kw">final long</span> dx = x - mLastX, dy = y - mLastY;
+            <span class="kw">if</span> ((<span class="kw">double</span>)(dx*dx + dy*dy) &lt; mEpsilonSq) <span class="kw">return</span>; <span class="com">// drop</span>
+        }
+        mLastX = x; mLastY = y; mHasLast = <span class="kw">true</span>;
+        mNext.add(x, y);
+    }
+}</code></pre>
+
+    <h4>Constraints</h4>
+    <ul>
+      <li><strong>Opt-in &amp; zoom-gated:</strong> default off to avoid changing existing apps' rendering. Enable only below a configurable zoom threshold.</li>
+      <li><strong>Preserve endpoints:</strong> always keep first/last points and any milestone-relevant vertices.</li>
+      <li><strong>Placement:</strong> belongs in the screen-space accepter chain (after projection, before clip-store) so the epsilon is in pixels, not degrees.</li>
+      <li><strong>Interaction:</strong> hit-testing already works in screen space, so simplified geometry stays consistent with taps.</li>
+    </ul>
+    <p class="note"><strong>Payoff:</strong> for a 10,000-point track at zoom 10, expect a 90%+ reduction in points fed to <code>drawLines</code> &mdash; turning a per-frame bottleneck into a non-issue, while being invisible to the eye at that zoom.</p>
+  </div>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section id="appendix">
+  <h2><span class="num">08</span> Appendix</h2>
+
+  <details open>
+    <summary>Affected source files</summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>File</th><th>Findings</th></tr></thead>
+        <tbody>
+          <tr><td><code>views/overlay/DefaultOverlayManager.java</code></td><td>F1, F4, F7</td></tr>
+          <tr><td><code>views/overlay/LinearRing.java</code></td><td>F2, F3, F10</td></tr>
+          <tr><td><code>views/overlay/LineDrawer.java</code></td><td>F5</td></tr>
+          <tr><td><code>views/overlay/PolyOverlayWithIW.java</code></td><td>F6, F9</td></tr>
+          <tr><td><code>views/overlay/Overlay.java</code></td><td>F8</td></tr>
+          <tr><td><code>util/SideOptimizationPointAccepter.java</code></td><td>F10 (chain)</td></tr>
+          <tr><td><code>views/overlay/advancedpolyline/MonochromaticPaintList.java</code></td><td>F5 (reference)</td></tr>
+        </tbody>
+      </table>
+      <p style="color:var(--text-dim);font-size:.85rem">All paths relative to <code>osmdroid-android/src/main/java/org/osmdroid/</code>.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>How to measure the improvements</summary>
+    <div class="body">
+      <ul>
+        <li><strong>Frame time:</strong> enable <code>Configuration.getInstance().setDebugMapView(true)</code> and read the <code>dispatchDraw</code> timing log; or use Android Studio Profiler &rarr; CPU &rarr; System Trace and inspect the <code>dispatchDraw</code> / <code>onDraw</code> slices.</li>
+        <li><strong>GC pressure (F2/F3/F5):</strong> Memory Profiler &rarr; record allocations during a continuous pan over 600+ polylines; count <code>PointL</code> / <code>MonochromaticPaintList</code> allocations and GC events before vs. after.</li>
+        <li><strong>Jank:</strong> <code>adb shell dumpsys gfxinfo &lt;package&gt;</code> for janky-frame percentage and the histogram of frame durations.</li>
+        <li><strong>Repro scenario:</strong> the polyline sample fragment under <code>OpenStreetMapViewer</code>, loaded with 600+ polylines, panned and pinch-zoomed continuously for ~30s.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Glossary</summary>
+    <div class="body">
+      <table>
+        <tbody>
+          <tr><td><code>PointL</code></td><td>Mutable long-precision (x, y) point holder used in screen/projection math; cheap to reuse, costly to allocate in bulk.</td></tr>
+          <tr><td>GC pressure</td><td>Rate of short-lived heap allocations forcing garbage collection; high rates cause frame-time spikes (jank).</td></tr>
+          <tr><td><code>SegmentClipper</code></td><td>Clips line segments to a virtual screen-relative rectangle, avoiding huge pixel coordinates and HW-accel path bugs.</td></tr>
+          <tr><td><code>CopyOnWriteArrayList</code></td><td>Thread-safe list that copies its entire backing array on every mutation &mdash; safe for concurrent reads, expensive for frequent writes.</td></tr>
+          <tr><td>Quick win</td><td>An isolated, behavior-preserving change with no cross-cutting dependencies, safe to batch into one PR.</td></tr>
+          <tr><td>Douglas&ndash;Peucker</td><td>Classic polyline simplification that drops vertices within an epsilon distance of the line between retained endpoints.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+</main>
+
+<footer>
+  <p>Generated for the <strong>osmdroid LostRat fork</strong> &mdash; display layer &amp; polyline pipeline review.<br>
+  Self-contained report &mdash; no external dependencies. Open in any browser; print/export via the browser's Print dialog.</p>
+</footer>
+
+</body>
+</html>

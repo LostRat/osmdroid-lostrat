@@ -50,3 +50,9 @@ OSMMapTilePackager/src/main/java/org/osmdroid/api/
 osmdroid-android/src/main/java/org/osmdroid/OsmdroidBuildInfo.java
 lint-report-*.html
 osmdroid-dist-*.zip
+
+# LostRat fork: local tool state and local-only reference material
+.codex-tmp/
+.kiro/
+.vscode/
+/reference/local/
