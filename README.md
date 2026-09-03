@@ -9,15 +9,40 @@ I needed an updated version for myself, for my own app.
 
 I can only hope that the other features survive the updates. I do not use any other modules.
 
-Will try to use JitPack to make it possible to include this as a dependency in your own app. (I am creating test app. The osmdroid-android import below worked for me right now, 20250816. MapView in layout is the same.)
+## Using the fork in your app
+
+The fork is published through [JitPack](https://jitpack.io/#LostRat/osmdroid-lostrat), which builds
+straight from this GitHub repository. Add the JitPack repository once:
 
 ```groovy
-    implementation("com.github.lostrat.osmdroid-lostrat:osmdroid-android:master-SNAPSHOT")
-    implementation("com.github.lostrat.osmdroid-lostrat:osmdroid-mapsforge:master-SNAPSHOT")
+// settings.gradle(.kts) -> dependencyResolutionManagement.repositories
+maven { url = uri("https://jitpack.io") }
 ```
 
-Otherwise you can use: `gradlew clean build publishToMavenLocal` then for example:
+JitPack only serves three kinds of version, and the version string is **not** the `pom.version` in
+`gradle.properties`:
 
+| Version string | What you get |
+|---|---|
+| `v7.0.1-lostrat` (a git tag) | Fixed, reproducible. Use this. |
+| `<40-char commit hash>` or its short form | That exact commit. Useful to try a fix before it is tagged. |
+| `master-SNAPSHOT` | Latest push to `master`. Moves under you; JitPack may cache it for a day. |
+
+There is no `7.0.2-lostrat-SNAPSHOT` on JitPack. That string is the in-repo `pom.version` and only
+exists in your **local** Maven repository after you build it yourself:
+
+```bash
+./gradlew clean build publishToMavenLocal
+```
+
+```groovy
+// then, with mavenLocal() in your repositories (note the plain com.github.lostrat group):
+implementation("com.github.lostrat:osmdroid-android:7.0.2-lostrat-SNAPSHOT")
+implementation("com.github.lostrat:osmdroid-mapsforge:7.0.2-lostrat-SNAPSHOT")
+implementation("com.github.lostrat:osmdroid-geopackage:7.0.2-lostrat-SNAPSHOT")
+```
+
+The [TestOsmdroidLostRat](https://github.com/LostRat/Test-Osmdroid-LostRat) app consumes the fork this way while a release is being prepared, then switches to the tag.
 
 July 1, 2026 note — **tagged release** `v7.0.1-lostrat`:
 
@@ -40,10 +65,10 @@ com.github.LostRat.osmdroid-lostrat:osmdroid-android:v7.0.1-lostrat
 com.github.LostRat.osmdroid-lostrat:osmdroid-wms:v7.0.1-lostrat
 ```
 
-**Current development version** (adds `MapsForgeTileCacheKeys` and fixes MapsForge tile cache read/write pairing, see `docs/CHANGELOG-lostrat.md`):
+**Unreleased changes on `master`** (adds `MapsForgeTileCacheKeys` and fixes MapsForge tile cache read/write pairing, see `docs/CHANGELOG-lostrat.md`) can be pulled from JitPack ahead of the next tag:
 ```groovy
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:7.0.2-lostrat-SNAPSHOT")
-implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:7.0.2-lostrat-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-android:master-SNAPSHOT")
+implementation("com.github.LostRat.osmdroid-lostrat:osmdroid-mapsforge:master-SNAPSHOT")
 ```
 
 November 27, 2025 — previous release `v7.0.0-lostrat`:
