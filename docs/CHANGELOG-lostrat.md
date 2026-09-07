@@ -11,6 +11,10 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 ## [Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)
 
+### MapsForge
+
+- Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.
+
 ---
 
 ## [7.0.2-lostrat] — 2026-09-03

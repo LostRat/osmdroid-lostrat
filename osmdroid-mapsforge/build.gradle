@@ -41,9 +41,9 @@ dependencies {
 //    api 'org.mapsforge:mapsforge-themes:master-SNAPSHOT'
 
     // jitpack access
-    api 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.28.0'
-    api 'com.github.mapsforge.mapsforge:mapsforge-map:0.28.0'
-    api 'com.github.mapsforge.mapsforge:mapsforge-themes:0.28.0'
+    api 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.30.0'
+    api 'com.github.mapsforge.mapsforge:mapsforge-map:0.30.0'
+    api 'com.github.mapsforge.mapsforge:mapsforge-themes:0.30.0'
 
 
 

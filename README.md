@@ -5,7 +5,7 @@ I needed an updated version for myself, for my own app.
 - Set minimum API to 23. Compiler should automatically exclude code that is exclusively for API below 23.
 - Updated gradle stuff for version 8.
 - Used gemini cli to aid in updating deprecations in osmdroid-android module.
-- Updated osmdroid-mapsforge module and the OpenStreetMapsViewer sample project that uses it. Both now use MapsForge version 0.25.0. Included my tiny forest park .map for testing.
+- Updated osmdroid-mapsforge module and the OpenStreetMapsViewer sample project that uses it. Both now use MapsForge version 0.30.0. Included my tiny forest park .map for testing.
 
 I can only hope that the other features survive the updates. I do not use any other modules.
 

@@ -34,7 +34,7 @@ import java.io.InputStream;
 
 /**
  * Adapted from code from here: https://github.com/MKergall/osmbonuspack, which is LGPL
- * Updated for Mapsforge 0.28.0
+ * Updated for Mapsforge 0.30.0
  */
 public class MapsForgeTileSource extends BitmapTileSourceBase {
 

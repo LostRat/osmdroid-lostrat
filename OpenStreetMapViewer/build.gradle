@@ -142,10 +142,10 @@ dependencies {
 //    implementation 'org.mapsforge:mapsforge-themes:0.25.0'
 
 
-    // Explicitly pull the 0.28.0 variations via JitPack to override defaults
-    implementation 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.28.0'
-    implementation 'com.github.mapsforge.mapsforge:mapsforge-map:0.28.0'
-    implementation 'com.github.mapsforge.mapsforge:mapsforge-themes:0.28.0'
+    // Explicitly pull the 0.30.0 variations via JitPack to override defaults
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.30.0'
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-map:0.30.0'
+    implementation 'com.github.mapsforge.mapsforge:mapsforge-themes:0.30.0'
 
     // Exclude androidsvg JAR from mapsforge-map-android
 //    implementation('org.mapsforge:mapsforge-map-android:0.21.0') {
