@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026-09-06 Terrain-RGB Hillshade Overlay: design, verification, commit plan</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1.25rem; }
+    h1 { border-bottom: 2px solid #8884; padding-bottom: 0.25rem; }
+    h2 { margin-top: 2rem; color: #2563eb; }
+    h3 { margin-top: 1.25rem; }
+    code { background: #8882; padding: 0.1em 0.35em; border-radius: 4px; }
+    pre { background: #8882; padding: 0.75rem; border-radius: 6px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+    th, td { border: 1px solid #8884; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+    th { background: #8882; }
+    .ok { color: #16a34a; font-weight: 600; }
+    .warn { color: #d97706; font-weight: 600; }
+    .meta { color: #666; font-size: 0.95rem; }
+    hr { border: none; border-top: 1px solid #8884; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+<h1>Terrain-RGB Hillshade Overlay</h1>
+<p class="meta">2026-09-06 · branch <code>feat/terrain-rgb-hillshade</code> · targets <code>7.0.3-lostrat-SNAPSHOT</code> · usage guide: <a href="TERRAIN_RGB_HILLSHADE.md">TERRAIN_RGB_HILLSHADE.md</a></p>
+
+<h2>1. What was added</h2>
+<p>A hillshade layer computed on the device from a Terrain-RGB MBTiles file, the raster DEM format MapLibre GL uses for
+<code>raster-dem</code> sources. Stock osmdroid has never had a DEM layer. The overlay draws over any base map, including none,
+and is driven by one file at a time through two calls, <code>setFile</code> and <code>setEnabled</code>.</p>
+<table>
+  <thead><tr><th>Class (all in <code>org.osmdroid.tileprovider.terrain</code>)</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><code>HillshadeOverlay</code></td><td>Public entry point. Owns one archive and one tile provider; reads zoom range, bounds, tile size and encoding from the file; draws nothing outside the bounds; live setters for opacity, sun and exaggeration.</td></tr>
+    <tr><td><code>HillshadeTileProvider</code></td><td>Single-archive module provider. Calls the tile source to shade each tile. The place for the tile-edge padding fix.</td></tr>
+    <tr><td><code>HillshadeTileSource</code></td><td><code>BitmapTileSourceBase</code> carrying encoding, sun, opacity and exaggeration. Decodes forcing ARGB_8888 so no elevation bits are lost, shades using the tile index for ground resolution.</td></tr>
+    <tr><td><code>Hillshader</code></td><td>Pure maths: metres per pixel at the tile's latitude, Horn 3x3 kernel, translucent ARGB output that is clear on level ground.</td></tr>
+    <tr><td><code>TerrainRgbEncoding</code></td><td><code>base</code> / <code>interval</code> pair with Mapbox and Terrarium presets and a parser for <code>base &lt;b&gt; interval &lt;i&gt;</code> in the MBTiles description.</td></tr>
+    <tr><td><code>SampleHillshade</code> (viewer)</td><td>Loads the first <code>*terrain*.mbtiles</code> in the app's external files folder (<code>Android/data/org.osmdroid/files[/osmdroid|/Download]</code>), the osmdroid base path, or shared Downloads when readable; zooms to its bounds, on/off button and file picker.</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Design decisions</h2>
+<ul>
+  <li><strong>Overlay level, not base map level.</strong> The overlay has its own provider and archive, so base map switches, offline mode and a disabled base <code>TilesOverlay</code> never touch it. It never joins the base provider's archive list.</li>
+  <li><strong>One file at a time.</strong> Stock osmdroid's multi-archive list is irrelevant here; a second <code>setFile</code> closes the previous archive and swaps the provider. This keeps the consuming app to one toggle.</li>
+  <li><strong>Encoding from metadata.</strong> Mapbox is base -10000 interval 0.1; Terrarium is base -32768 interval 1/256; files built with <code>rio rgbify -b -10000 -i 1</code> are integer metres. The description string carries the pair. A wrong encoding does not crash, it produces relief ten times too flat, which is why the finalize step on the build side matters.</li>
+  <li><strong>Overzoom through <code>MapTileApproximater</code>.</strong> Above the file's top zoom the last native level is scaled up. Hillshade tolerates this; it goes soft at street zoom.</li>
+  <li><strong>Everything is live.</strong> Opacity, sun and exaggeration clear the overlay's cache and invalidate; tiles re-shade on the loader threads in a few milliseconds each, so the setters can sit behind sliders.</li>
+</ul>
+
+<h2>3. Verification</h2>
+<table>
+  <thead><tr><th>Check</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><code>:osmdroid-android</code> and <code>:OpenStreetMapViewer</code> compile</td><td class="ok">clean, no new warnings</td></tr>
+    <tr><td>Consumed from Maven Local by PDXWalk (OsmTrails flavor) on a Pixel 7a, Android 17</td><td class="ok">file opened: z0-12, 512 px WebP, base -10000 interval 1, UK bounds</td></tr>
+    <tr><td>A/B with the layer off and on over the Cumbria base map</td><td class="ok">relief present only with the layer on</td></tr>
+    <tr><td>Offline render of the same z12 tile in Python with the same kernel</td><td class="ok">matches the device; used to prove a grid artefact was in the DEM, not the overlay (see the RouteSnapLab terrain plan, section 11)</td></tr>
+    <tr><td>Live opacity, sun and exaggeration changes from a dialog in PDXWalk</td><td class="ok">re-shade within a fraction of a second</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Known gaps</h2>
+<ul>
+  <li><span class="warn">Tile seams.</span> Each tile is shaded alone, so the kernel clamps at the edge and a one pixel seam shows on tile borders at high opacity. Fix in <code>HillshadeTileProvider.TileLoader.loadTile</code>: read the four edge neighbours from the archive, pad the grid by one pixel, shade, crop.</li>
+  <li>512 px tiles on a 256 px map are scaled into the tile rectangle; mapping a z+1 request onto a quadrant of the z tile would reclaim the resolution.</li>
+  <li>No lat/lng elevation lookup on the overlay yet; <code>HillshadeTileSource.elevationAt</code> decodes a pixel.</li>
+  <li>Metadata detection relies on the description text. Explicit keys (<code>layer</code>, <code>encoding</code>, <code>base</code>, <code>interval</code>, <code>tilesize</code>) written by the build side would let <code>readMetadata</code> prefer them.</li>
+</ul>
+
+<h2>5. Commit plan</h2>
+<p>The working tree also held the unrelated MapsForge 0.30 bump from before this work. It was committed first so the hillshade commit is clean.
+The two changelog files and <code>README.md</code> contained hunks from both; the MapsForge hunks (a heading, a bullet and the README version string) were staged at hunk level into commit A rather than riding along in commit B.</p>
+
+<h3>Commit A: MapsForge bump (done, e19d27d53)</h3>
+<pre>build(mapsforge): bump MapsForge to 0.30.0 via JitPack</pre>
+<p>Six files: <code>osmdroid-mapsforge/build.gradle</code>, <code>MapsForgeTileSource.java</code>, <code>OpenStreetMapViewer/build.gradle</code>, the README version line, and the MapsForge section of both changelogs.
+Fast-forward <code>master</code> to this commit before committing B, so the bump can ship on its own: <code>git branch -f master e19d27d53</code> (master is not checked out, so this is a plain pointer move).</p>
+
+<h3>Commit B: hillshade</h3>
+<pre>git add osmdroid-android/src/main/java/org/osmdroid/tileprovider/terrain \
+        OpenStreetMapViewer/src/main/java/org/osmdroid/samplefragments/tileproviders/SampleHillshade.java \
+        OpenStreetMapViewer/src/main/java/org/osmdroid/samplefragments/SampleFactory.java \
+        docs/TERRAIN_RGB_HILLSHADE.md docs/2026-09-06-terrain-rgb-hillshade-report.html \
+        docs/CHANGELOG-lostrat.md docs/CHANGELOG-lostrat.html README.md
+git commit -F - &lt;&lt;'MSG'
+feat(terrain): Terrain-RGB hillshade overlay
+
+Add org.osmdroid.tileprovider.terrain: HillshadeOverlay drives one
+Terrain-RGB MBTiles file at a time (setFile / setEnabled) and draws a
+translucent hillshade over any base map, including none. Zoom range,
+bounds, tile size and pixel encoding are read from the file; overzoom
+goes through MapTileApproximater; nothing is requested outside the
+bounds. Opacity, sun position and vertical exaggeration are live
+setters that re-shade cached tiles.
+
+TerrainRgbEncoding covers Mapbox, Terrarium and rio-rgbify
+base/interval pairs parsed from the MBTiles description. Hillshader
+is Horn's 3x3 kernel with metres-per-pixel from the tile latitude.
+
+Add SampleHillshade to the viewer, a usage guide and a dated report.
+
+Known gap: tiles are shaded alone, so a one pixel seam shows on tile
+borders at high opacity; the provider is the place to pad with
+neighbour tiles.
+MSG</pre>
+<p>Then tag <code>v7.0.3-lostrat</code> when the seam fix lands, or earlier if PDXWalk needs a JitPack build.</p>
+</body>
+</html>

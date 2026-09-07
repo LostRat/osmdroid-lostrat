@@ -11,6 +11,12 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 ## [Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)
 
+### Terrain-RGB hillshade
+
+- Add `org.osmdroid.tileprovider.terrain`: `HillshadeOverlay` (one Terrain-RGB MBTiles file at a time, `setFile` / `setEnabled`), `HillshadeTileProvider`, `HillshadeTileSource`, `Hillshader` (Horn 3x3 kernel, translucent output for any base map) and `TerrainRgbEncoding` (Mapbox, Terrarium, or `base / interval` parsed from the file description). Zoom range, bounds, tile size and encoding are read from the file; overzoom uses `MapTileApproximater`. Edge padding with neighbour tiles is still a TODO in the provider, so tile seams are visible at high opacity (2026-09-06)
+- Add vertical exaggeration to the hillshade: `Hillshader.shade(..., exaggeration)`, `HillshadeTileSource.setExaggeration`, `HillshadeOverlay.setExaggeration`; 1 is true relief, above 1 brings out gentle terrain, like MapLibre `hillshade-exaggeration`. Live, like opacity and sun (2026-09-06)
+- Add `SampleHillshade` (Terrain-RGB hillshade overlay) to the sample app; see `docs/TERRAIN_RGB_HILLSHADE.md` and `docs/2026-09-06-terrain-rgb-hillshade-report.html` (2026-09-06)
+
 ### MapsForge
 
 - Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.

@@ -6,6 +6,7 @@ I needed an updated version for myself, for my own app.
 - Updated gradle stuff for version 8.
 - Used gemini cli to aid in updating deprecations in osmdroid-android module.
 - Updated osmdroid-mapsforge module and the OpenStreetMapsViewer sample project that uses it. Both now use MapsForge version 0.30.0. Included my tiny forest park .map for testing.
+- Added a Terrain-RGB hillshade overlay (`org.osmdroid.tileprovider.terrain`, September 2026): one MBTiles DEM file, `setFile` / `setEnabled`, live opacity, sun and exaggeration, draws over any base map. See [docs/TERRAIN_RGB_HILLSHADE.md](docs/TERRAIN_RGB_HILLSHADE.md).
 
 I can only hope that the other features survive the updates. I do not use any other modules.
 
@@ -94,6 +95,8 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 | [docs/LAYERING_SYSTEM_TUTORIAL.md](docs/LAYERING_SYSTEM_TUTORIAL.md) | Tutorial for the layer system: use cases, manual overrides, migration from stock osmdroid |
 | [docs/DENSITY_SCALING_USAGE.md](docs/DENSITY_SCALING_USAGE.md) | `DisplayDensityManager` and `applyDensityScaling()` usage guide for MapsForge and overlays |
 | [docs/ADVANCED_POLYLINE_TUTORIAL.md](docs/ADVANCED_POLYLINE_TUTORIAL.md) | Multi-colour polylines with the `ColorMapping*` classes (speed, elevation, ranges) |
+| [docs/TERRAIN_RGB_HILLSHADE.md](docs/TERRAIN_RGB_HILLSHADE.md) | `HillshadeOverlay`: hillshading from a Terrain-RGB MBTiles file over any base map |
+| [docs/2026-09-06-terrain-rgb-hillshade-report.html](docs/2026-09-06-terrain-rgb-hillshade-report.html) | Hillshade overlay: design decisions, device verification, known gaps, commit plan |
 | [docs/16KB_PAGE_SIZE_COMPLIANCE.md](docs/16KB_PAGE_SIZE_COMPLIANCE.md) | Google Play 16 KB page-size requirement: what was changed and fallback options |
 | [docs/SQLTILEWRITER_NULL_SAFETY.md](docs/SQLTILEWRITER_NULL_SAFETY.md) | Why tile caching degrades gracefully instead of crashing when SQLite is unavailable |
 | [docs/2026-06-14-display-layer-optimization-report.html](docs/2026-06-14-display-layer-optimization-report.html) | Audit of the draw path (findings F1 to F6, which the June/July 2026 perf commits implement) |
