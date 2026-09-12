@@ -122,6 +122,9 @@ public class HillshadeOverlay extends Overlay {
         overzoom.addProvider(native_);
         mProvider = new MapTileProviderArray(mTileSource, mRegisterReceiver,
                 new MapTileModuleProviderBase[]{native_, overzoom});
+        // Redraw the map when a tile finishes loading, as the base tiles do; without this the
+        // tiles sit in the cache until something else invalidates the map.
+        mProvider.setTileRequestCompleteHandler(mMapView.getTileRequestCompleteHandler());
 
         mTiles = new TilesOverlay(mProvider, mMapView.getContext());
         mTiles.setLoadingBackgroundColor(Color.TRANSPARENT);
