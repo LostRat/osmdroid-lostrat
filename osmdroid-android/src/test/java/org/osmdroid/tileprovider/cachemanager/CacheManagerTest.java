@@ -23,7 +23,8 @@ import java.util.Random;
 import java.util.Set;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+// Use a supported Robolectric runtime independently of the library target SDK.
+@Config(manifest = Config.NONE, sdk = 35)
 public class CacheManagerTest {
 
     private final Random mRandom = new Random();
