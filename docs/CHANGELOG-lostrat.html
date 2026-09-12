@@ -37,6 +37,8 @@
   <hr>
 
   <h2>[Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)</h2>
+  <h3>Prepared polyline batches</h3>
+  <ul><li>Add <code>PolylineBatch</code>, <code>DefaultOverlayManager.replacePolylineBatch</code> and <code>Polyline.attachToMap</code> for worker preparation and linear-time UI publication with explicit layers, ownership/thread checks and regression tests (2026-09-11). See the <a href="2026-09-11-polyline-batch-report.html">integration and verification report</a>.</li></ul>
   <h3>Terrain-RGB hillshade</h3>
   <ul>
     <li>Add <code>org.osmdroid.tileprovider.terrain</code>: <code>HillshadeOverlay</code> (one Terrain-RGB MBTiles file at a time, <code>setFile</code> / <code>setEnabled</code>), <code>HillshadeTileProvider</code>, <code>HillshadeTileSource</code>, <code>Hillshader</code> (Horn 3x3 kernel, translucent output for any base map) and <code>TerrainRgbEncoding</code> (Mapbox, Terrarium, or <code>base / interval</code> parsed from the file description). Zoom range, bounds, tile size and encoding are read from the file; overzoom uses <code>MapTileApproximater</code>. Edge padding with neighbour tiles is still a TODO in the provider, so tile seams are visible at high opacity (2026-09-06)</li>

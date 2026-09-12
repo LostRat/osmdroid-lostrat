@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prepared polyline batches — September 11, 2026</title>
+<style>:root{color-scheme:light dark}body{font:16px/1.55 system-ui,sans-serif;max-width:65rem;margin:2rem auto;padding:0 1rem}pre{padding:1rem;background:#8882;overflow:auto}code{font-family:monospace}table{border-collapse:collapse}td,th{padding:.5rem;border:1px solid #8887;text-align:left}</style></head><body>
+<h1>Prepared polyline batches</h1><p>September 11, 2026 · 7.0.3-lostrat-SNAPSHOT · Library implementation; first consumer is PDXWalk's profile line renderer (see <a href="#consumer">Consumer integration</a>).</p>
+<h2>Problem and resulting behavior</h2><p>Adding thousands of road/path polylines one at a time copies the main and layer backing arrays repeatedly. Constructing geometry and installing it all in one UI callback can block input. Applications can now construct detached polylines and an ordered batch on a worker, then attach and publish that batch on the UI thread.</p>
+<h2>API</h2><table><tr><th>API</th><th>Purpose / thread</th></tr>
+<tr><td>new Polyline() or subclass super(null)</td><td>Prepare a private polyline without map or info-window access on the worker.</td></tr>
+<tr><td>PolylineBatch.Builder.add(polyline, layer).build()</td><td>Worker: snapshot membership and per-layer order, reject nulls, duplicates and folder members.</td></tr>
+<tr><td>Polyline.attachToMap(map) / batch.attachToMap(map)</td><td>Main thread: initialize density and absent default info windows; preserve geometry, styling and custom info windows.</td></tr>
+<tr><td>manager.replacePolylineBatch(previous, replacement)</td><td>Main thread: validate membership, bulk replace main/layer entries, update layer lookup and clear spatial caches.</td></tr>
+<tr><td>PolylineBatch.empty()</td><td>Initial previous value or replacement that removes all lines owned by this batch.</td></tr></table>
+<h2>Integration example</h2><p>The example is a template: LineData, inputSnapshot, lifecycle checks and executor belong to the consuming application. Capture independent data; do not pass mutable live cache collections to the worker.</p><pre><code>// UI-owned fields:
+private PolylineBatch displayed = PolylineBatch.empty();
+private long generation;
+
+// UI thread: capture display settings and independent input data before starting.
+final long request = ++generation;
+executor.execute(() -&gt; {
+    PolylineBatch.Builder builder = new PolylineBatch.Builder();
+    // Add roads first, then paths, for paths to draw above roads in the same layer.
+    for (LineData row : inputSnapshot) { // Application-defined immutable input.
+        Polyline line = new Polyline(); // Subclasses can call super(null).
+        line.setPoints(row.points());
+        line.getOutlinePaint().setColor(row.color());
+        line.getOutlinePaint().setStrokeWidth(row.width());
+        line.setTitle(row.title());
+        line.setId(row.id());
+        builder.add(line, DefaultOverlayManager.OverlayLayer.INTERACTIVE_BACKGROUND);
+    }
+    PolylineBatch prepared = builder.build();
+    map.post(() -&gt; {
+        if (request != generation || isDestroyed() || isFinishing()) return;
+        prepared.attachToMap(map);
+        DefaultOverlayManager manager = (DefaultOverlayManager) map.getOverlayManager();
+        manager.replacePolylineBatch(displayed, prepared);
+        displayed = prepared;
+        map.invalidate();
+    });
+});
+
+// UI thread: hide lines and reject any pending background result.
+++generation;
+manager.replacePolylineBatch(displayed, PolylineBatch.empty());
+displayed = PolylineBatch.empty();
+map.invalidate();</code></pre>
+<h2>Ownership, ordering and lifecycle</h2><ul>
+<li>The worker must stop modifying the polyline objects after handing them to the UI. Batch membership is immutable; the objects themselves remain mutable. Reused live polylines must not be edited by a worker.</li>
+<li>A batch owns only its explicitly supplied top-level polylines. Do not independently remove them or place them in folders. Do not share polylines between maps. Previous members missing from the main list and new members already installed elsewhere in the manager are rejected before list changes.</li>
+<li>Existing, unrelated overlays retain their relative order. Replacement members are appended above survivors within each chosen layer; batch insertion order applies when layers are disabled. Higher layers still draw last and receive tap priority.</li>
+<li>Layer lists are updated in the same main-thread callback as the main list and lookup. This is coherent for main-thread drawing/tapping; it is not a transaction for background readers. Existing manager mutation APIs must also be used on the UI thread.</li>
+<li>Publication does not invalidate automatically and removal does not call onDetach, matching ordinary remove. Close an open info window explicitly before retiring its owner if appropriate. Normal map teardown remains responsible for its repository.</li>
+<li>Increment the app generation when profile selection, viewport requirements or display filters change, and when hiding/destroying the display. Discard stale worker results before attachment.</li></ul>
+<h2>Performance and limits</h2><p>Batch preparation and geometry conversion run in the background. Publication remains linear in the existing overlay count plus old/new batch size. The main list and each layer use bulk removeAll with a hash set and bulk addAll: at most two backing-array copies per list, independent of batch size. There is still per-object lookup/attachment work and temporary memory for the old/new geometry. This is not an O(1) collection swap.</p><p>Actual projection, drawing and hit-testing remain on the UI thread. No ANR elimination or device speedup is claimed without app measurements. Time preparation, attachment/publication and the first redraw separately on the affected device and emulator.</p>
+<h2>Verification</h2>
+<p>Follow-up: pinned CacheManagerTest to Robolectric SDK 35 after resource-enabled tests selected the library target SDK 37, beyond this Robolectric version's supported maximum of 36. The full <code>.\gradlew.bat :osmdroid-android:testDebugUnitTest --console=plain</code> task now passes: 146 tests, zero failures/errors. Library compile/target SDKs remain unchanged.</p><p>Passed: <code>.\gradlew.bat :osmdroid-android:testDebugUnitTest --tests 'org.osmdroid.views.overlay.*' :osmdroid-android:assembleRelease --console=plain</code>.</p>
+<p>Seven new Robolectric tests verify worker construction and UI-only publication; geometry, density, default/custom info windows and listeners; replacement/clearing and unrelated overlays; validation before mutation; immutable membership and folder/duplicate rejection; layer draw order and reverse tap order; and a 2,000-line replacement that bypasses per-overlay add/remove while preserving existing iterator snapshots. Existing overlay tests also pass. Release AAR built successfully. Existing Gradle deprecation and spatial-grid unchecked-array warnings remain.</p>
+<p>Checked UTF-8, CRLF and git diff whitespace. Published this working tree to Maven Local on 2026-09-11 16:59 with <code>.\gradlew.bat :osmdroid-android:publishToMavenLocal</code> (that AAR also carries the uncommitted hillshade provider change). Re-ran <code>:osmdroid-android:testDebugUnitTest --tests 'org.osmdroid.views.overlay.*'</code> the same evening: 7 PolylineBatchTest tests, 0 failures.</p>
+<h2 id="consumer">Consumer integration</h2><p>PDXWalk consumes the API in <code>vectordata/BreadcrumbBatchRenderer</code>, driven by its existing <code>BreadcrumbTasksThreadedExec</code> worker. The UI captures the currently installed profile polylines as the <em>previous</em> batch, the worker builds missing polylines with a null MapView through the app's existing draw-item builders, reuses live polylines by id, orders roads, walking routes, simple lines and bicycle routes, and builds the replacement. The UI re-checks its snapshot (mode, display state, zoom, full-precision center, installed lists, profile generation), attaches only newly built polylines, calls <code>replacePolylineBatch(previous, prepared)</code> once and invalidates. Clearing goes through <code>replacePolylineBatch(current, PolylineBatch.empty())</code>. Batch is PDXWalk's default in all builds; the legacy per-polyline path is selectable only in debug builds.</p><p>Emulator results: PDXWalk's instrumented <code>BreadcrumbBatchRendererTest</code> (geometry and style parity with the legacy builders, reuse, clearing, an unrelated overlay preserved, 400 repeated cache loads) passed on emulator-5554. A 72 minute Powell Butte session on the Pixel 9 emulator ran in batch mode on 2026-09-11 and exported its event bundle and subsegment route normally. Timing lines from that session were not retained. A later emulator session the same evening (heavy panning, debuggable true and then false) logged 38 batch publications with UI-thread work of 9.7 ms median and 86.5 ms maximum for up to 917 overlays, every publication verified, and none of the "close app or wait" dialogs the per-polyline path had been producing under the same panning.</p>
+<h2>Commit plan</h2><p>Two commits on <code>feat/terrain-rgb-hillshade</code>, oldest first. The hillshade provider change in the same working tree is unrelated and goes in its own commit, before or after these.</p><table><tr><th>Commit</th><th>Files</th></tr>
+<tr><td><code>test(android): let Robolectric unit tests load Android resources</code></td><td>osmdroid-android/build.gradle (includeAndroidResources), src/test/.../cachemanager/CacheManagerTest.java (pin sdk 35)</td></tr>
+<tr><td><code>feat(overlays): prepared polyline batches with bulk replacement</code></td><td>src/main/.../views/overlay/PolylineBatch.java (new), DefaultOverlayManager.java, Polyline.java, src/test/.../views/overlay/PolylineBatchTest.java (new), README.md, docs/CHANGELOG-lostrat.md, docs/CHANGELOG-lostrat.html, docs/2026-09-11-polyline-batch-report.html (this file)</td></tr>
+<tr><td><code>refactor(terrain): hillshade tile provider registers no receiver</code> (separate, unrelated)</td><td>src/main/.../tileprovider/terrain/HillshadeOverlay.java, HillshadeTileProvider.java</td></tr></table>
+<p>Full messages are kept with the PDXWalk-side plan in that repo's <code>docs/claude/2026-09-11-polyline-batch-commit-plan.html</code>. No commit or push has been performed yet.</p>
+</body></html>

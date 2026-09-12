@@ -21,6 +21,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -131,6 +134,70 @@ public class DefaultOverlayManager extends AbstractList<Overlay> implements Over
             mOverlayList.add(pIndex, pElement);
             // ENHANCED FIX: Automatically assign overlay to appropriate layer
             assignOverlayToLayer(pElement);
+        }
+    }
+
+    /**
+     * Replaces one caller-owned batch without per-polyline copy-on-write list mutations.
+     * Main thread only: drawing and touch dispatch cannot interleave with publication.
+     * All other mutations of this manager must also remain on the main thread.
+     *
+     * Pass PolylineBatch.empty() for the first previous batch or to remove the current batch.
+     * The caller retains the successfully published batch for the next replacement. Do not
+     * independently add/remove its members, put them in folders, or share them with another map.
+     * Retained objects may occur in both batches, but must not be edited by a worker while live.
+     * Replacement order is appended above surviving overlays within each explicit layer;
+     * unrelated overlays and their relative order are preserved. Layer-disabled drawing uses
+     * the batch insertion order. No onDetach is invoked (same as individual remove).
+     *
+     * Attach detached polylines on the UI thread before calling; invalidate the map afterwards.
+     * The operation is O(existing overlays + batch size), with at most two backing-array copies
+     * per affected list, rather than one copy for every addition/removal. Not a draw-cost limit.
+     */
+    public void replacePolylineBatch(PolylineBatch previous, PolylineBatch replacement) {
+        PolylineBatch.requireMainThread();
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(replacement, "replacement");
+        Set<Overlay> existing = new HashSet<>(mOverlayList);
+        if (!existing.containsAll(previous.members)) {
+            throw new IllegalArgumentException("Previous batch is no longer fully installed");
+        }
+        for (Polyline polyline : replacement.polylines) {
+            if (polyline.getParent() != null) {
+                throw new IllegalArgumentException("Batch polylines cannot belong to a folder");
+            }
+            if (!previous.members.contains(polyline)
+                    && (existing.contains(polyline) || mOverlayToLayer.containsKey(polyline))) {
+                throw new IllegalArgumentException("Replacement contains an unrelated live polyline");
+            }
+        }
+        if (previous == replacement) {
+            return;
+        }
+        mOverlayList.removeAll(previous.members);
+        mOverlayList.addAll(replacement.polylines);
+        for (OverlayLayer layer : OverlayLayer.values()) {
+            List<Overlay> list = mLayeredOverlays.get(layer);
+            list.removeAll(previous.members);
+            List<Polyline> additions = replacement.layers.get(layer);
+            if (additions != null) {
+                list.addAll(additions);
+            }
+        }
+        for (Polyline polyline : previous.polylines) {
+            mOverlayToLayer.remove(polyline);
+        }
+        for (Map.Entry<OverlayLayer, List<Polyline>> entry : replacement.layers.entrySet()) {
+            for (Polyline polyline : entry.getValue()) {
+                mOverlayToLayer.put(polyline, entry.getKey());
+            }
+        }
+        // Drop references and any viewport-derived state for the old collection.
+        mVisibleOverlays.clear();
+        mLastViewport = null;
+        mLastZoomLevel = -1;
+        for (List<Overlay> cell : spatialGrid) {
+            cell.clear();
         }
     }
 

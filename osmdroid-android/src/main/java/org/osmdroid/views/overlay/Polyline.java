@@ -3,6 +3,8 @@ package org.osmdroid.views.overlay;
 import android.graphics.Color;
 import android.graphics.Paint;
 
+import java.util.Objects;
+
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 
@@ -22,6 +24,23 @@ import java.util.ArrayList;
 public class Polyline extends PolyOverlayWithIW {
 
     protected OnClickListener mOnClickListener;
+
+    /**
+     * Completes a polyline constructed with a null MapView on a worker thread.
+     * Call on the main thread after the worker hands off ownership, before adding to a map.
+     * Preserves geometry, paint, listeners and custom info windows; initializes map density
+     * and the default info window when absent. Does not publish or invalidate the polyline.
+     * Do not share a published polyline between maps.
+     */
+    public void attachToMap(final MapView mapView) {
+        PolylineBatch.requireMainThread();
+        Objects.requireNonNull(mapView, "mapView");
+        if (getInfoWindow() == null) {
+            setInfoWindow(mapView.getRepository().getDefaultPolylineInfoWindow());
+        }
+        mDensity = mapView.getContext().getResources().getDisplayMetrics().density;
+    }
+
 
     /**
      * If MapView is not provided, infowindow popup will not function unless you set it yourself.

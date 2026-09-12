@@ -8,6 +8,8 @@ I needed an updated version for myself, for my own app.
 - Updated osmdroid-mapsforge module and the OpenStreetMapsViewer sample project that uses it. Both now use MapsForge version 0.30.0. Included my tiny forest park .map for testing.
 - Added a Terrain-RGB hillshade overlay (`org.osmdroid.tileprovider.terrain`, September 2026): one MBTiles DEM file, `setFile` / `setEnabled`, live opacity, sun and exaggeration, draws over any base map. See [docs/TERRAIN_RGB_HILLSHADE.md](docs/TERRAIN_RGB_HILLSHADE.md).
 
+- Added prepared polyline batches (September 2026): construct detached road/path polylines on a worker, then attach and bulk replace them on the UI thread with explicit layer ordering. See [the batch API and integration example](docs/2026-09-11-polyline-batch-report.html).
+
 I can only hope that the other features survive the updates. I do not use any other modules.
 
 ## Using the fork in your app
@@ -91,6 +93,7 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 |----------|-------------|
 | [docs/CHANGELOG-lostrat.md](docs/CHANGELOG-lostrat.md) | Fork-specific changelog (Markdown) |
 | [docs/CHANGELOG-lostrat.html](docs/CHANGELOG-lostrat.html) | Same changelog as HTML (readable in a browser) |
+| [docs/2026-09-11-polyline-batch-report.html](docs/2026-09-11-polyline-batch-report.html) | Worker preparation, bulk publication, ownership and integration example for polyline batches |
 | [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system (reference) |
 | [docs/LAYERING_SYSTEM_TUTORIAL.md](docs/LAYERING_SYSTEM_TUTORIAL.md) | Tutorial for the layer system: use cases, manual overrides, migration from stock osmdroid |
 | [docs/DENSITY_SCALING_USAGE.md](docs/DENSITY_SCALING_USAGE.md) | `DisplayDensityManager` and `applyDensityScaling()` usage guide for MapsForge and overlays |
