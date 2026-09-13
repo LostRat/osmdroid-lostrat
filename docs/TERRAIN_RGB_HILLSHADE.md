@@ -1,6 +1,6 @@
 # Terrain-RGB Hillshade Overlay
 
-Status: **working** (2026-09-06), verified on a Pixel 7a through PDXWalk / OsmTrails. Tile-edge padding is still a TODO. Design notes, verification and the commit plan are in [2026-09-06-terrain-rgb-hillshade-report.html](2026-09-06-terrain-rgb-hillshade-report.html).
+Status: **working** (2026-09-13), verified on a Pixel 7a through PDXWalk / OsmTrails and the bundled sample. Tile-edge padding is still a TODO. Design notes, verification and the commit plan are in [2026-09-06-terrain-rgb-hillshade-report.html](2026-09-06-terrain-rgb-hillshade-report.html).
 
 ## What it is
 

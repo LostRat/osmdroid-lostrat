@@ -6,7 +6,7 @@ I needed an updated version for myself, for my own app.
 - Updated gradle stuff for version 8.
 - Used gemini cli to aid in updating deprecations in osmdroid-android module.
 - Updated osmdroid-mapsforge module and the OpenStreetMapsViewer sample project that uses it. Both now use MapsForge version 0.30.0. Included my tiny forest park .map for testing.
-- Added a Terrain-RGB hillshade overlay (`org.osmdroid.tileprovider.terrain`, September 2026): one MBTiles DEM file, `setFile` / `setEnabled`, live opacity, sun and exaggeration, draws over any base map. See [docs/TERRAIN_RGB_HILLSHADE.md](docs/TERRAIN_RGB_HILLSHADE.md).
+- Added a Terrain-RGB hillshade overlay (`org.osmdroid.tileprovider.terrain`, September 2026): one MBTiles DEM file, `setFile` / `setEnabled`, live opacity, sun and exaggeration, draws over any base map. The sample app ships a small Forest Park Terrain-RGB file in `assets/mbtiles/`; open "Terrain-RGB hillshade (bundled Forest Park file)" in OpenStreetMapViewer to see it, and read `SampleHillshadeAsset` for the whole recipe in one method. See [docs/TERRAIN_RGB_HILLSHADE.md](docs/TERRAIN_RGB_HILLSHADE.md).
 
 - Added prepared polyline batches (September 2026): construct detached road/path polylines on a worker, then attach and bulk replace them on the UI thread with explicit layer ordering. See [the batch API and integration example](docs/2026-09-11-polyline-batch-report.html).
 

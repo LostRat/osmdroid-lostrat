@@ -95,6 +95,7 @@ import org.osmdroid.samplefragments.tileproviders.OfflinePickerSample;
 import org.osmdroid.samplefragments.tileproviders.SampleAssetsOnly;
 import org.osmdroid.samplefragments.tileproviders.SampleAssetsOnlyRepetitionModes;
 import org.osmdroid.samplefragments.tileproviders.SampleHillshade;
+import org.osmdroid.samplefragments.tileproviders.SampleHillshadeAsset;
 import org.osmdroid.samplefragments.tileproviders.SampleOfflineGemfOnly;
 import org.osmdroid.samplefragments.tileproviders.SampleOfflineOnly;
 import org.osmdroid.samplefragments.tileproviders.SampleTileStates;
@@ -320,6 +321,7 @@ public final class SampleFactory implements ISampleFactory {
         mSamples.add(SampleUnreachableOnlineTiles.class);
         mSamples.add(SampleRotationListener.class);
         mSamples.add(SampleHillshade.class);
+        mSamples.add(SampleHillshadeAsset.class);
     }
 
     public void addSample(Class<? extends BaseSampleFragment> clz) {
