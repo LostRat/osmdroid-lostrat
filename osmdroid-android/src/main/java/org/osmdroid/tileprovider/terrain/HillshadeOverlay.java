@@ -8,12 +8,10 @@ import android.graphics.Color;
 import android.util.Log;
 
 import org.osmdroid.api.IMapView;
-import org.osmdroid.tileprovider.IRegisterReceiver;
 import org.osmdroid.tileprovider.MapTileProviderArray;
 import org.osmdroid.tileprovider.modules.MBTilesFileArchive;
 import org.osmdroid.tileprovider.modules.MapTileApproximater;
 import org.osmdroid.tileprovider.modules.MapTileModuleProviderBase;
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
@@ -42,6 +40,10 @@ import java.util.Map;
  * file's bounds nothing is requested or drawn. Above the file's maximum zoom the last
  * native level is scaled up.
  * </p>
+ * <p>
+ * Passive: the overlay registers nothing with the system and reacts only to the app's
+ * calls, so {@link #setFile(File)} may be called any number of times on one overlay.
+ * </p>
  *
  * @since 7.0.3-lostrat
  */
@@ -50,7 +52,6 @@ public class HillshadeOverlay extends Overlay {
     private static final String TAG = "HillshadeOverlay";
 
     private final MapView mMapView;
-    private final IRegisterReceiver mRegisterReceiver;
 
     private File mFile;
     private MBTilesFileArchive mArchive;
@@ -67,7 +68,6 @@ public class HillshadeOverlay extends Overlay {
 
     public HillshadeOverlay(final MapView pMapView) {
         mMapView = pMapView;
-        mRegisterReceiver = new SimpleRegisterReceiver(pMapView.getContext());
         setEnabled(false);
     }
 
@@ -117,10 +117,10 @@ public class HillshadeOverlay extends Overlay {
         mTileSource.setMaxAlpha(mMaxAlpha);
         mTileSource.setExaggeration(mExaggeration);
 
-        final HillshadeTileProvider native_ = new HillshadeTileProvider(mRegisterReceiver, mTileSource, mArchive);
+        final HillshadeTileProvider native_ = new HillshadeTileProvider(mTileSource, mArchive);
         final MapTileApproximater overzoom = new MapTileApproximater();
         overzoom.addProvider(native_);
-        mProvider = new MapTileProviderArray(mTileSource, mRegisterReceiver,
+        mProvider = new MapTileProviderArray(mTileSource, null,   // no receiver to destroy on detach
                 new MapTileModuleProviderBase[]{native_, overzoom});
         // Redraw the map when a tile finishes loading, as the base tiles do; without this the
         // tiles sit in the cache until something else invalidates the map.

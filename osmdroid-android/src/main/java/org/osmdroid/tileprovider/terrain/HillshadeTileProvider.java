@@ -5,9 +5,7 @@ import android.util.Log;
 
 import org.osmdroid.api.IMapView;
 import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.IRegisterReceiver;
 import org.osmdroid.tileprovider.modules.IArchiveFile;
-import org.osmdroid.tileprovider.modules.MapTileFileStorageProviderBase;
 import org.osmdroid.tileprovider.modules.MapTileModuleProviderBase;
 import org.osmdroid.tileprovider.tilesource.ITileSource;
 import org.osmdroid.tileprovider.util.StreamUtils;
@@ -24,6 +22,11 @@ import java.io.InputStream;
  * overlay, not by this provider.
  * </p>
  * <p>
+ * Passive: extends {@link MapTileModuleProviderBase} directly, not the file-storage base,
+ * so it registers no broadcast receiver and reacts to nothing but the app's calls. The app
+ * chose the file; if the file goes away, the app handles that.
+ * </p>
+ * <p>
  * TODO(seams): {@link TileLoader#loadTile(long)} currently shades one tile in isolation, so
  * Horn's kernel clamps at the tile edge and leaves a one pixel seam. Because the archive is
  * in hand here, the fix is local: read the four edge neighbours (x-1, x+1, y-1, y+1), copy
@@ -33,15 +36,13 @@ import java.io.InputStream;
  *
  * @since 7.0.3-lostrat
  */
-public class HillshadeTileProvider extends MapTileFileStorageProviderBase {
+public class HillshadeTileProvider extends MapTileModuleProviderBase {
 
     private final IArchiveFile mArchive;
     private final HillshadeTileSource mTileSource;
 
-    public HillshadeTileProvider(final IRegisterReceiver pRegisterReceiver,
-                                 final HillshadeTileSource pTileSource, final IArchiveFile pArchive) {
-        super(pRegisterReceiver,
-                Configuration.getInstance().getTileFileSystemThreads(),
+    public HillshadeTileProvider(final HillshadeTileSource pTileSource, final IArchiveFile pArchive) {
+        super(Configuration.getInstance().getTileFileSystemThreads(),
                 Configuration.getInstance().getTileFileSystemMaxQueueSize());
         mTileSource = pTileSource;
         mArchive = pArchive;
