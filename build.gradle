@@ -31,7 +31,11 @@ allprojects {
     tasks.withType(JavaCompile).tap {
         configureEach {
             options.encoding = "UTF-8"
-            options.compilerArgs += ["-Xlint:unchecked", "-Xlint:deprecation"]
+            options.compilerArgs += ["-Xlint:unchecked"]
+            // per-call deprecation warnings are hundreds of lines; opt in with -PlintDeprecation
+            if (project.hasProperty('lintDeprecation')) {
+                options.compilerArgs += ["-Xlint:deprecation"]
+            }
         }
     }
 

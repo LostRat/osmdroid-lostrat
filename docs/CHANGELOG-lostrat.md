@@ -27,6 +27,7 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 - Move the AGP, Kotlin plugin, SpotBugs, JUnit, Robolectric and MapsForge versions into a `gradle/libs.versions.toml` version catalog, and apply the plugins through the root `plugins {}` block instead of a `buildscript` classpath. Android Studio's Upgrade Assistant could not change the AGP version while it was read from `gradle.properties` (it found 0 usages). The `android-plugin.version`, `junit.version` and `robolectric.version` properties are gone. Bump AGP 9.4.0 to 9.4.1 (2026-10-05)
 - Move every remaining library coordinate from the module `build.gradle` files into the version catalog, so Android Studio no longer flags them with "Use version catalog instead". `resolutionStrategy.force` entries now build their versions from `libs.versions.*`. Resolved dependency trees are unchanged. Bump Gradle wrapper to 9.8.0, Kotlin plugin to 2.4.20, androidx appcompat 1.8.0 / core 1.19.1 / sqlite 2.7.1 / lifecycle (forced) 2.10.0, Robolectric 4.17, and the JDK-tool libraries (Spring 7, Jersey 4) (2026-10-05)
+- Make javac `-Xlint:deprecation` opt-in (`-PlintDeprecation`); it printed 300+ per-call warnings on every clean build. Remove `android.nonFinalResIds=false` (no `switch` on resource ids remains; AGP 10 drops the option). Fix the `OSMTileInfo` javadoc `@param` names (2026-10-05)
 
 ### Sample app
 

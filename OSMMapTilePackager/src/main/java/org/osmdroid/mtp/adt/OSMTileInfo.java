@@ -42,9 +42,8 @@ public class OSMTileInfo {
     }
 
     /**
-     * @param child
-     * @param parent
-     * @return
+     * @param pParent the tile one zoom level up that contains this tile
+     * @return this tile's quadrant in {@code pParent}: {@code POSITION_IN_PARENT_LEFT} or {@code _RIGHT} plus {@code POSITION_IN_PARENT_TOP} or {@code _BOTTOM}
      */
     public int getPositionInParent(final OSMTileInfo pParent) {
         final int childShouldUpperLeftX = pParent.x * 2;
