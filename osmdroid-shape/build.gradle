@@ -32,7 +32,7 @@ android {
 
 dependencies {
 
-    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
+    testImplementation libs.junit.vintage.engine
     api  project(':osmdroid-android')
     api 'com.github.spyhunter99:jdbf:2.2.4'
 

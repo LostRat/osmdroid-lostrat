@@ -42,9 +42,9 @@ android {
 dependencies {
     implementation 'androidx.core:core:1.19.0'
     implementation 'androidx.preference:preference:1.2.1'
-    testImplementation "org.junit.jupiter:junit-jupiter-api:${project.property('junit.version')}"
-    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
-    testImplementation "org.robolectric:robolectric:${project.property('robolectric.version')}"
+    testImplementation libs.junit.jupiter.api
+    testImplementation libs.junit.vintage.engine
+    testImplementation libs.robolectric
 }
 
 tasks.register('cleanCustomFiles', Delete) {

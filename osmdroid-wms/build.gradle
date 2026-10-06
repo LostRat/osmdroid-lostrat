@@ -34,7 +34,7 @@ android {
 dependencies {
     //
     api  project(':osmdroid-android')
-    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
+    testImplementation libs.junit.vintage.engine
 }
 
 

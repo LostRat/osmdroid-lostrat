@@ -28,7 +28,7 @@ android {
 }
 
 dependencies {
-    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
+    testImplementation libs.junit.vintage.engine
 
     //Mapsforge rendering and database support, which is LGPL
 //    api 'org.mapsforge:mapsforge-map-android:0.25.0'
@@ -41,9 +41,9 @@ dependencies {
 //    api 'org.mapsforge:mapsforge-themes:master-SNAPSHOT'
 
     // jitpack access
-    api 'com.github.mapsforge.mapsforge:mapsforge-map-android:0.30.0'
-    api 'com.github.mapsforge.mapsforge:mapsforge-map:0.30.0'
-    api 'com.github.mapsforge.mapsforge:mapsforge-themes:0.30.0'
+    api libs.mapsforge.map.android
+    api libs.mapsforge.map
+    api libs.mapsforge.themes
 
 
 

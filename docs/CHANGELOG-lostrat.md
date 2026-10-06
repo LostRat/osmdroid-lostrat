@@ -23,6 +23,10 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 - Make `HillshadeOverlay` passive: `HillshadeTileProvider` now extends `MapTileModuleProviderBase` and neither class registers a broadcast receiver. Before, `unload()` (also called by `setFile` on a new file) detached the provider, which destroyed the overlay's one `SimpleRegisterReceiver`, and the next `setFile` failed with a null context; apps had to replace the overlay to switch files. Constructor of `HillshadeTileProvider` loses its `IRegisterReceiver` parameter (2026-09-13)
 - Add `SampleHillshadeAsset`: minimal hillshade example using the bundled `assets/mbtiles/forest-park-terrain-rgb.mbtiles` (Forest Park, Portland OR); copies the asset to the cache dir, loads it into a `HillshadeOverlay` on the background-tiles layer and zooms to its bounds (2026-09-13)
 
+### Build
+
+- Move the AGP, Kotlin plugin, SpotBugs, JUnit, Robolectric and MapsForge versions into a `gradle/libs.versions.toml` version catalog, and apply the plugins through the root `plugins {}` block instead of a `buildscript` classpath. Android Studio's Upgrade Assistant could not change the AGP version while it was read from `gradle.properties` (it found 0 usages). The `android-plugin.version`, `junit.version` and `robolectric.version` properties are gone. Bump AGP 9.4.0 to 9.4.1 (2026-10-05)
+
 ### MapsForge
 
 - Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.

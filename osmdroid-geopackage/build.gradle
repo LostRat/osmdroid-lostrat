@@ -42,7 +42,7 @@ dependencies {
     //crash logging
     //implementation 'ch.acra:acra:4.7.0'
 
-    testImplementation "org.junit.vintage:junit-vintage-engine:${project.property('junit.version')}"
+    testImplementation libs.junit.vintage.engine
 
     api  project(':osmdroid-android')
     implementation ("mil.nga.geopackage:geopackage-android:6.7.5"){

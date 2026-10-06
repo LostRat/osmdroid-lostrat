@@ -47,6 +47,10 @@
     <li>Make <code>HillshadeOverlay</code> passive: <code>HillshadeTileProvider</code> now extends <code>MapTileModuleProviderBase</code> and neither class registers a broadcast receiver. Before, <code>unload()</code> (also called by <code>setFile</code> on a new file) detached the provider, which destroyed the overlay's one <code>SimpleRegisterReceiver</code>, and the next <code>setFile</code> failed with a null context; apps had to replace the overlay to switch files. Constructor of <code>HillshadeTileProvider</code> loses its <code>IRegisterReceiver</code> parameter (2026-09-13)</li>
     <li>Add <code>SampleHillshadeAsset</code>: minimal hillshade example using the bundled <code>assets/mbtiles/forest-park-terrain-rgb.mbtiles</code> (Forest Park, Portland OR); copies the asset to the cache dir, loads it into a <code>HillshadeOverlay</code> on the background-tiles layer and zooms to its bounds (2026-09-13)</li>
   </ul>
+  <h3>Build</h3>
+  <ul>
+    <li>Move the AGP, Kotlin plugin, SpotBugs, JUnit, Robolectric and MapsForge versions into a <code>gradle/libs.versions.toml</code> version catalog, and apply the plugins through the root <code>plugins {}</code> block instead of a <code>buildscript</code> classpath. Android Studio's Upgrade Assistant could not change the AGP version while it was read from <code>gradle.properties</code> (it found 0 usages). The <code>android-plugin.version</code>, <code>junit.version</code> and <code>robolectric.version</code> properties are gone. Bump AGP 9.4.0 to 9.4.1 (2026-10-05)</li>
+  </ul>
   <h3>MapsForge</h3>
   <ul>
     <li>Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.</li>
