@@ -1,24 +1,13 @@
 package org.osmdroid;
 
 import android.app.Application;
-import android.content.Context;
 import android.os.Environment;
 import android.os.StrictMode;
 import android.util.Log;
 
-import org.acra.ACRA;
-import org.acra.annotation.ReportsCrashes;
-import org.acra.collector.CrashReportData;
-import org.acra.config.ACRAConfiguration;
-import org.acra.sender.ReportSender;
-import org.acra.sender.ReportSenderException;
-import org.acra.sender.ReportSenderFactory;
 import org.osmdroid.config.Configuration;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
 
 /**
  * This is the base application for the sample app. We only use to catch errors during development cycles
@@ -27,10 +16,6 @@ import java.io.PrintWriter;
  * Created by alex on 7/4/16.
  */
 
-@ReportsCrashes(
-        formUri = "",
-        reportSenderFactoryClasses = {OsmApplication.ErrorFileWriterFactory.class}
-)
 public class OsmApplication extends Application {
 
     @Override
@@ -98,20 +83,6 @@ public class OsmApplication extends Application {
 
     }
 
-    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-
-        try {
-            // Initialise ACRA
-            ACRA.init(this);
-        } catch (Throwable t) {
-            t.printStackTrace();
-            //this can happen on androidx86 getExternalStorageDir is not writable or if there is a
-            //permissions issue
-        }
-    }
-
     public static class OsmUncaughtExceptionHandler implements Thread.UncaughtExceptionHandler {
         @Override
         public void uncaughtException(Thread thread, Throwable ex) {
@@ -132,50 +103,6 @@ public class OsmApplication extends Application {
             android.os.Debug.dumpHprofData(Environment.getExternalStorageDirectory().getAbsolutePath() + "/osmdroid/trace-" + System.currentTimeMillis() + ".hprof");
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-
-    /**
-     * Writes hard crash stack traces to a file on the SD card.
-     */
-    public static class ErrorFileWriterFactory implements ReportSenderFactory {
-        @Override
-        public ReportSender create(Context context, ACRAConfiguration config) {
-            return new ErrorFileWriter();
-        }
-    }
-
-    private static class ErrorFileWriter implements ReportSender {
-
-        @Override
-        public void send(Context context, CrashReportData crashReportData) throws ReportSenderException {
-            try {
-                String rootDirectory = Environment.getExternalStorageDirectory()
-                        .getAbsolutePath();
-                File f = new File(rootDirectory
-                        + File.separatorChar
-                        + "osmdroid"
-                        + File.separatorChar);
-                f.mkdirs();
-                f = new File(rootDirectory
-                        + File.separatorChar
-                        + "osmdroid"
-                        + File.separatorChar
-                        + "crash.log");
-                if (f.exists())
-                    f.delete();
-
-
-                f.createNewFile();
-                PrintWriter pw = new PrintWriter(new FileWriter(f));
-                pw.println(crashReportData.toString());
-                pw.close();
-            } catch (Exception exc) {
-                exc.printStackTrace();
-            }
-
-
         }
     }
 }

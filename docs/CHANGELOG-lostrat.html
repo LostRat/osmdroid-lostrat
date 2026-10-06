@@ -57,6 +57,7 @@
   <h3>Sample app</h3>
   <ul>
     <li>Fix the intro screen on devices with a taskbar: at targetSdk 35+ the app is drawn edge-to-edge, and <code>IntroActivity</code> applied no window insets, so its Next/Prev bar sat under the taskbar (seen on an unfolded Pixel 10 Pro emulator). The intro root now pads itself by the system-bar and display-cutout insets (2026-10-05)</li>
+    <li>Remove ACRA 4.11.1 and turn Jetifier off (<code>android.enableJetifier</code> removed). ACRA was the only library still on the old support library, and it recorded nothing: <code>OsmApplication</code> installed its own main-thread crash handler ahead of it, and its sender wrote to <code>/sdcard/osmdroid/crash.log</code>, which apps can't write on Android 11+ (2026-10-05)</li>
   </ul>
   <h3>MapsForge</h3>
   <ul>

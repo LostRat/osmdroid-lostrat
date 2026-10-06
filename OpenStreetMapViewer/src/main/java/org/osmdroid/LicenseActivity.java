@@ -22,7 +22,7 @@ public class LicenseActivity extends AppCompatActivity implements AdapterView.On
     TextView license;
     String[] values = new String[]{
             "osmdroid", "geopackage",
-            "mapsforge", "ACRA", "leakcanary", "ormlite", "pngj"
+            "mapsforge", "leakcanary", "ormlite", "pngj"
     };
 
     @Override
@@ -68,15 +68,12 @@ public class LicenseActivity extends AppCompatActivity implements AdapterView.On
                 license.setText(R.string.license_mapsforge);
                 break;
             case 3:
-                license.setText(R.string.license_acra);
-                break;
-            case 4:
                 license.setText(R.string.license_leakcanary);
                 break;
-            case 5:
+            case 4:
                 license.setText(R.string.license_ormlite);
                 break;
-            case 6:
+            case 5:
                 license.setText(R.string.license_pngj);
                 break;
         }

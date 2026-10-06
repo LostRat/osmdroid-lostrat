@@ -184,8 +184,6 @@ dependencies {
     implementation libs.androidx.recyclerview
 
     implementation libs.androidx.appcompat
-    //crash logging
-    implementation libs.acra
 
 
     //on device testing

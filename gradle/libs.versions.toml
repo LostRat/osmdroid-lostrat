@@ -30,7 +30,6 @@ geopackageAndroid = "6.7.5"
 milSymAndroidRenderer = "0.2.5"
 filepicker = "1.1.1"
 opencsv = "5.12.0"
-acra = "4.11.1"
 jdbf = "2.2.4"
 
 # JDK tools (OSMMapTilePackager, osmdroid-server-jdk)
@@ -82,7 +81,6 @@ geopackage-android = { module = "mil.nga.geopackage:geopackage-android", version
 mil-sym-android-renderer = { module = "io.github.missioncommand:mil-sym-android-renderer", version.ref = "milSymAndroidRenderer" }
 filepicker = { module = "com.github.angads25:filepicker", version.ref = "filepicker" }
 opencsv = { module = "com.opencsv:opencsv", version.ref = "opencsv" }
-acra = { module = "ch.acra:acra", version.ref = "acra" }
 jdbf = { module = "com.github.spyhunter99:jdbf", version.ref = "jdbf" }
 
 # JDK tools (OSMMapTilePackager, osmdroid-server-jdk)

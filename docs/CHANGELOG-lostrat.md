@@ -33,6 +33,7 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 ### Sample app
 
 - Fix the intro screen on devices with a taskbar: at targetSdk 35+ the app is drawn edge-to-edge, and `IntroActivity` applied no window insets, so its Next/Prev bar sat under the taskbar (seen on an unfolded Pixel 10 Pro emulator). The intro root now pads itself by the system-bar and display-cutout insets (2026-10-05)
+- Remove ACRA 4.11.1 and turn Jetifier off (`android.enableJetifier` removed). ACRA was the only library still on the old support library, and it recorded nothing: `OsmApplication` installed its own main-thread crash handler ahead of it, and its sender wrote to `/sdcard/osmdroid/crash.log`, which apps can't write on Android 11+ (2026-10-05)
 
 ### MapsForge
 
