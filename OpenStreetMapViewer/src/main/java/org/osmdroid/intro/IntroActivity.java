@@ -11,6 +11,9 @@ import android.widget.ProgressBar;
 import org.osmdroid.MainActivity;
 import org.osmdroid.R;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager.widget.ViewPager;
 
@@ -44,6 +47,12 @@ public class IntroActivity extends FragmentActivity implements View.OnClickListe
 
 
         setContentView(R.layout.intro_frame);
+        //edge-to-edge is enforced at targetSdk 35+, keep the next/prev bar clear of the nav bar / taskbar
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.introRoot), (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
         introviewpager = findViewById(R.id.introviewpager);
         adapter = new IntroSliderAdapter(getSupportFragmentManager());
         introviewpager.setAdapter(adapter);
