@@ -50,6 +50,7 @@
   <h3>MapsForge</h3>
   <ul>
     <li>Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.</li>
+    <li>Add <code>MapsForgeTileSource.setTextScaleByZoom(growthPerZoom, startZoom)</code>: label text grows by <code>growthPerZoom</code> per zoom level above <code>startZoom</code>, capped at 2.5x, so labels keep up with Mapsforge's 1.5x-per-zoom line widening above zoom 12. Lines and symbols are unchanged; <code>1</code> is stock Mapsforge. The setting is static and each source snapshots it at construction. <code>MapsForgeTileCacheKeys</code> adds a <code>text-&lt;percent&gt;-z&lt;zoom&gt;</code> part for non-stock settings, so stock text keeps existing cache names; call it before building the cache key and the source. The label store's <code>getVisibleItems</code> mirrors Mapsforge 0.30.0's <code>MapDataStoreLabelStore</code>, so recheck it on MapsForge upgrades (2026-10-05)</li>
   </ul>
   <hr>
 

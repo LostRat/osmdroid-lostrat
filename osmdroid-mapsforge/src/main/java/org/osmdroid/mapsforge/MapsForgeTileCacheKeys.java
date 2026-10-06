@@ -15,7 +15,8 @@ import java.util.Locale;
  * applied to the tile source (see {@link MapsForgeTileSource#applyDensityScaling()} /
  * {@link MapsForgeTileSource#setUserScaleFactor(float)}) — not the raw display density.
  * Tiles rendered at different scales must never share a cache namespace, and densities
- * that clamp to the same scale should share one.
+ * that clamp to the same scale should share one. A non-stock
+ * {@link MapsForgeTileSource#setTextScaleByZoom(float, int)} setting is folded in too.
  */
 public final class MapsForgeTileCacheKeys {
 
@@ -70,12 +71,16 @@ public final class MapsForgeTileCacheKeys {
         final String themePart = sanitize(themeName, DEFAULT_THEME);
         final String scalePart = "scale-" + Math.round(renderScale * 100);
         final String variantPart = sanitize(variant, null);
-        final String hash = shortHash(mapFiles, themeName, renderScale, variant);
+        final String textPart = MapsForgeTileSource.textScaleCacheKeyPart();
+        final String hash = shortHash(mapFiles, themeName, renderScale, variant, textPart);
 
         final StringBuilder key = new StringBuilder(PREFIX);
         key.append('-').append(mapPart);
         key.append('-').append(themePart);
         key.append('-').append(scalePart);
+        if (textPart != null) {
+            key.append('-').append(textPart);
+        }
         if (variantPart != null) {
             key.append('-').append(variantPart);
         }
@@ -148,12 +153,17 @@ public final class MapsForgeTileCacheKeys {
     }
 
     private static String shortHash(final File[] mapFiles, final String themeName,
-                                    final float renderScale, final String variant) {
+                                    final float renderScale, final String variant,
+                                    final String textPart) {
         try {
             final MessageDigest digest = MessageDigest.getInstance("SHA-256");
             updateDigest(digest, themeName);
             updateDigest(digest, Float.toString(renderScale));
             updateDigest(digest, variant);
+            // Only when set, so stock text scaling keeps existing cache names.
+            if (textPart != null) {
+                updateDigest(digest, textPart);
+            }
 
             if (mapFiles != null) {
                 updateDigest(digest, Integer.toString(mapFiles.length));

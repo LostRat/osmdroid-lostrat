@@ -56,6 +56,21 @@ public class MapsForgeTileCacheKeysTest {
     }
 
     @Test
+    public void textScaleByZoomGetsItsOwnKeyAndStockKeepsTheOldOne() {
+        final File mapFile = new File("maps/forest-park-2025.map");
+        final String stock = MapsForgeTileCacheKeys.forMapAndTheme(mapFile, "default", 0.6f);
+        try {
+            MapsForgeTileSource.setTextScaleByZoom(1.15f, 15);
+            final String grown = MapsForgeTileCacheKeys.forMapAndTheme(mapFile, "default", 0.6f);
+            Assert.assertNotEquals(stock, grown);
+            Assert.assertTrue(grown.contains("-scale-60-text-115-z15-"));
+        } finally {
+            MapsForgeTileSource.setTextScaleByZoom(1f, 15);
+        }
+        Assert.assertEquals(stock, MapsForgeTileCacheKeys.forMapAndTheme(mapFile, "default", 0.6f));
+    }
+
+    @Test
     public void currentRenderScaleFallsBackToDefaultWithoutManager() {
         // DisplayDensityManager is never initialized in unit tests, matching the case
         // where applyDensityScaling() is a no-op and tiles render at the default scale.

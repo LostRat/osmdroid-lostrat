@@ -61,6 +61,18 @@ float scaledLineWidth = density.getScaledLineWidth(2.0f);
 float scaledTextSize = density.getScaledTextSize(16.0f);
 ```
 
+### 5. Larger Label Text at High Zoom (MapsForge)
+Mapsforge widens lines 1.5x per zoom level above 12 but draws label text at one size, so
+labels look small next to roads when zoomed in. `setTextScaleByZoom` grows text only:
+```java
+// Before building the cache key and the tile source.
+MapsForgeTileSource.setTextScaleByZoom(1.15f, 15); // +15% per zoom above 15, max 2.5x
+String cacheName = MapsForgeTileCacheKeys.forMapsAndTheme(mapFiles, "default");
+MapsForgeTileSource tileSource = MapsForgeTileSource.createFromFiles(mapFiles, theme, cacheName);
+```
+Sources snapshot the setting when created. A non-stock setting gets its own cache key
+(`...-text-115-z15-...`); `setTextScaleByZoom(1f, 15)` restores stock text and the old key.
+
 ## Scale Factor Comparison
 
 ### Your Manual Calculation:

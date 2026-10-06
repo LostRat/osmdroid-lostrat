@@ -26,6 +26,7 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 ### MapsForge
 
 - Bump MapsForge from 0.28.0 to 0.30.0 (JitPack). 0.29/0.30 are POI v4 and theme updates; the DirectRenderer tile API we use is unchanged.
+- Add `MapsForgeTileSource.setTextScaleByZoom(growthPerZoom, startZoom)`: label text grows by `growthPerZoom` per zoom level above `startZoom`, capped at 2.5x, so labels keep up with Mapsforge's 1.5x-per-zoom line widening above zoom 12. Lines and symbols are unchanged; `1` is stock Mapsforge. The setting is static and each source snapshots it at construction. `MapsForgeTileCacheKeys` adds a `text-<percent>-z<zoom>` part for non-stock settings, so stock text keeps existing cache names; call it before building the cache key and the source. The label store's `getVisibleItems` mirrors Mapsforge 0.30.0's `MapDataStoreLabelStore`, so recheck it on MapsForge upgrades (2026-10-05)
 
 ---
 

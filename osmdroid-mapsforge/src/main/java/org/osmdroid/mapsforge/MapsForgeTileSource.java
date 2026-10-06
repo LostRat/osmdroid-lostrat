@@ -6,16 +6,20 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 
+import org.mapsforge.core.mapelements.MapElementContainer;
 import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.Tile;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.graphics.AndroidTileBitmap;
+import org.mapsforge.map.datastore.MapReadResult;
 import org.mapsforge.map.datastore.MultiMapDataStore;
 import org.mapsforge.map.layer.hills.HillsRenderConfig;
 import org.mapsforge.map.layer.renderer.DirectRenderer;
 import org.mapsforge.map.layer.renderer.RendererJob;
+import org.mapsforge.map.layer.renderer.StandardRenderer;
 import org.mapsforge.map.model.DisplayModel;
 import org.mapsforge.map.reader.MapFile;
+import org.mapsforge.map.rendertheme.RenderContext;
 import org.mapsforge.map.rendertheme.XmlRenderTheme;
 import org.mapsforge.map.rendertheme.StreamRenderTheme;
 import org.mapsforge.map.rendertheme.rule.RenderThemeFuture;
@@ -31,6 +35,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Adapted from code from here: https://github.com/MKergall/osmbonuspack, which is LGPL
@@ -53,6 +59,16 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
 
     private final DisplayModel model = new DisplayModel();
     private final float scale = DisplayModel.getDefaultUserScaleFactor();
+
+    // Mapsforge widens lines 1.5x per zoom above 12 but draws text one size at every zoom.
+    // Label text grows by sTextScaleGrowth per zoom above sTextScaleStartZoom; 1 = stock.
+    private static final float TEXT_SCALE_MAX = 2.5f;
+    private static float sTextScaleGrowth = 1f;
+    private static int sTextScaleStartZoom = 15;
+    // Snapshot at construction so a source always matches the cache key it was named with.
+    private final float textScaleGrowth = sTextScaleGrowth;
+    private final int textScaleStartZoom = sTextScaleStartZoom;
+
     private RenderThemeFuture theme = null;
     private XmlRenderTheme mXmlRenderTheme = null;
     private DirectRenderer renderer;
@@ -91,14 +107,30 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
         }
         mXmlRenderTheme = xmlRenderTheme;
 
-        // Create MapDataStoreLabelStore with all required parameters
+        // Labels are drawn from this store, not from the tile's own RendererJob, so it must
+        // use the same per-zoom text scale. Body mirrors MapDataStoreLabelStore.getVisibleItems
+        // (Mapsforge 0.30.0) with the fixed textScale swapped for textScaleForZoom().
+        final StandardRenderer labelRenderer =
+                new StandardRenderer(mapDatabase, AndroidGraphicFactory.INSTANCE, true);
         MapDataStoreLabelStore labelStore = new MapDataStoreLabelStore(
-                mapDatabase,                    // MapDataStore mapDataStore
-                theme,                         // RenderThemeFuture renderThemeFuture
-                scale,                         // float textScale
-                model,                         // DisplayModel displayModel
-                AndroidGraphicFactory.INSTANCE // GraphicFactory graphicFactory
-        );
+                mapDatabase, theme, scale, model, AndroidGraphicFactory.INSTANCE) {
+            @Override
+            public List<MapElementContainer> getVisibleItems(Tile upperLeft, Tile lowerRight) {
+                try {
+                    RendererJob rendererJob = new RendererJob(upperLeft, mapDatabase, theme, model,
+                            textScaleForZoom(upperLeft.zoomLevel), true, true);
+                    RenderContext renderContext = new RenderContext(rendererJob, AndroidGraphicFactory.INSTANCE);
+                    MapReadResult mapReadResult = mapDatabase.readMapData(upperLeft, lowerRight);
+                    if (mapReadResult == null) {
+                        return new ArrayList<>();
+                    }
+                    labelRenderer.processReadMapData(renderContext, mapReadResult);
+                    return renderContext.getLabels();
+                } catch (Exception e) {
+                    return new ArrayList<>();
+                }
+            }
+        };
 
         renderer = new DirectRenderer(
                 mapDatabase,
@@ -258,7 +290,8 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
         if (mapDatabase == null) return null;
 
         try {
-            RendererJob mapGeneratorJob = new RendererJob(tile, mapDatabase, theme, model, scale, false, false);
+            RendererJob mapGeneratorJob = new RendererJob(tile, mapDatabase, theme, model,
+                    textScaleForZoom(tile.zoomLevel), false, false);
             AndroidTileBitmap bmp = (AndroidTileBitmap) renderer.executeJob(mapGeneratorJob);
             if (bmp != null) {
                 return new BitmapDrawable(sResources, AndroidGraphicFactory.getBitmap(bmp));
@@ -288,6 +321,36 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
     public void addTileRefresher(DirectRenderer.TileRefresher pDirectTileRefresher) {
         // TileRefresher interface is obsolete as of 2024 - deterministic labels made it unnecessary
         Log.w(IMapView.LOGTAG, "TileRefresher is obsolete in newer MapsForge versions");
+    }
+
+    /**
+     * Grow label text by {@code growthPerZoom} for each zoom level above {@code startZoom},
+     * capped at 2.5x. Lines and symbols are unaffected. Applies to sources created afterwards,
+     * and to cache keys built afterwards by {@link MapsForgeTileCacheKeys}; call it before both.
+     * {@code growthPerZoom} 1 restores stock Mapsforge (same text size at every zoom).
+     */
+    public static void setTextScaleByZoom(float growthPerZoom, int startZoom) {
+        if (growthPerZoom <= 0f) {
+            throw new IllegalArgumentException("growthPerZoom must be > 0: " + growthPerZoom);
+        }
+        sTextScaleGrowth = growthPerZoom;
+        sTextScaleStartZoom = startZoom;
+    }
+
+    /**
+     * Cache key part for the current {@link #setTextScaleByZoom} setting, or null when text
+     * scaling is stock so existing tile cache names are unchanged.
+     */
+    static String textScaleCacheKeyPart() {
+        if (sTextScaleGrowth == 1f) {
+            return null;
+        }
+        return "text-" + Math.round(sTextScaleGrowth * 100) + "-z" + sTextScaleStartZoom;
+    }
+
+    private float textScaleForZoom(byte zoom) {
+        int steps = Math.max(0, zoom - textScaleStartZoom);
+        return scale * Math.min(TEXT_SCALE_MAX, (float) Math.pow(textScaleGrowth, steps));
     }
 
     /**

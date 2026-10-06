@@ -10,6 +10,8 @@ I needed an updated version for myself, for my own app.
 
 - Added prepared polyline batches (September 2026): construct detached road/path polylines on a worker, then attach and bulk replace them on the UI thread with explicit layer ordering. See [the batch API and integration example](docs/2026-09-11-polyline-batch-report.html).
 
+- Added `MapsForgeTileSource.setTextScaleByZoom` (October 2026): MapsForge label text can grow with zoom so it stays readable next to the roads Mapsforge widens at high zoom, with its own tile-cache key. See [docs/DENSITY_SCALING_USAGE.md](docs/DENSITY_SCALING_USAGE.md#5-larger-label-text-at-high-zoom-mapsforge).
+
 I can only hope that the other features survive the updates. I do not use any other modules.
 
 ## Using the fork in your app
