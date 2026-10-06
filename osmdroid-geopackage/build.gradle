@@ -45,7 +45,7 @@ dependencies {
     testImplementation libs.junit.vintage.engine
 
     api  project(':osmdroid-android')
-    implementation ("mil.nga.geopackage:geopackage-android:6.7.5"){
+    implementation(libs.geopackage.android){
         exclude group: 'com.google.android.gms'
         exclude group: 'com.google.maps.android'
         exclude group: 'com.android.support',module: 'support-v13'

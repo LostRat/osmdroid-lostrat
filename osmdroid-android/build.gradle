@@ -40,8 +40,8 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core:1.19.0'
-    implementation 'androidx.preference:preference:1.2.1'
+    implementation libs.androidx.core
+    implementation libs.androidx.preference
     testImplementation libs.junit.jupiter.api
     testImplementation libs.junit.vintage.engine
     testImplementation libs.robolectric

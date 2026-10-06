@@ -158,7 +158,7 @@ dependencies {
 //    }
 
 
-    implementation "androidx.legacy:legacy-support-v4:1.0.0"
+    implementation libs.androidx.legacy.support.v4
     implementation project(':osmdroid-android')
     implementation project(':osmdroid-geopackage')
     implementation project(':osmdroid-mapsforge')
@@ -166,43 +166,43 @@ dependencies {
     implementation project(':osmdroid-shape')
 
     //mil-sym-android-renderer brings in a conflicting version of androidsvg
-    implementation('io.github.missioncommand:mil-sym-android-renderer:0.2.5') {
+    implementation(libs.mil.sym.android.renderer) {
         exclude group: 'com.caverock', module: 'androidsvg-aar'
     }
 
-    implementation 'androidx.preference:preference:1.2.1'
+    implementation libs.androidx.preference
 
     //used for various demos for picking offline tile archives
-    implementation 'com.github.angads25:filepicker:1.1.1'
+    implementation libs.filepicker
 
     //used for bookmark demo
-    implementation 'com.opencsv:opencsv:5.12.0'
+    implementation libs.opencsv
 
     //usual android stuff
-    implementation "com.google.android.material:material:1.14.0" //needed for UI menuing
-    implementation "androidx.cardview:cardview:1.0.0"
-    implementation "androidx.recyclerview:recyclerview:1.4.0"
+    implementation libs.material //needed for UI menuing
+    implementation libs.androidx.cardview
+    implementation libs.androidx.recyclerview
 
-    implementation "androidx.appcompat:appcompat:1.7.1"
+    implementation libs.androidx.appcompat
     //crash logging
-    implementation 'ch.acra:acra:4.11.1'
+    implementation libs.acra
 
 
     //on device testing
-    androidTestImplementation "androidx.annotation:annotation:1.10.0"
+    androidTestImplementation libs.androidx.annotation
 
 
-    androidTestImplementation "androidx.test:runner:1.7.0"
-    androidTestImplementation "androidx.test:rules:1.7.0"
+    androidTestImplementation libs.androidx.test.runner
+    androidTestImplementation libs.androidx.test.rules
     // Optional -- UI testing with Espresso
-    androidTestImplementation "androidx.test.espresso:espresso-core:3.7.0"
+    androidTestImplementation libs.androidx.test.espresso.core
     // Optional -- UI testing with UI Automator
-    androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
+    androidTestImplementation libs.androidx.test.uiautomator
     // Optional -- UI testing with Compose
-    androidTestImplementation "androidx.compose.ui:ui-test-junit4:1.11.3"
+    androidTestImplementation libs.androidx.compose.ui.test.junit4
 
 
-    implementation("mil.nga.geopackage:geopackage-android:6.7.5") {
+    implementation(libs.geopackage.android) {
         // It's good practice to repeat the excludes here if you repeated them
         // in the osmdroid-geopackage module, for consistency and to ensure
         // only what you need is included.
@@ -219,18 +219,19 @@ dependencies {
     }
 
     // Use Android's built-in SQLite instead of the bundled version for 16KB compatibility
-    implementation 'androidx.sqlite:sqlite:2.6.2'
-    implementation 'androidx.sqlite:sqlite-framework:2.6.2'
+    implementation libs.androidx.sqlite
+    implementation libs.androidx.sqlite.framework
 }
 
 configurations.configureEach {
     resolutionStrategy {
-        force "androidx.lifecycle:lifecycle-livedata:2.6.2"
-        force "androidx.lifecycle:lifecycle-runtime:2.6.2"
-        force "androidx.lifecycle:lifecycle-viewmodel:2.6.2"
+        force "androidx.annotation:annotation:${libs.versions.androidxAnnotation.get()}"
+        force "androidx.lifecycle:lifecycle-livedata:${libs.versions.androidxLifecycle.get()}"
+        force "androidx.lifecycle:lifecycle-runtime:${libs.versions.androidxLifecycle.get()}"
+        force "androidx.lifecycle:lifecycle-viewmodel:${libs.versions.androidxLifecycle.get()}"
 
         // Force use of system SQLite for 16KB compatibility
-        force 'androidx.sqlite:sqlite:2.6.2'
-        force 'androidx.sqlite:sqlite-framework:2.6.2'
+        force "androidx.sqlite:sqlite:${libs.versions.androidxSqlite.get()}"
+        force "androidx.sqlite:sqlite-framework:${libs.versions.androidxSqlite.get()}"
     }
 }

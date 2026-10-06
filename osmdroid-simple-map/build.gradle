@@ -42,10 +42,10 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.preference:preference:1.2.1'
-    implementation "androidx.appcompat:appcompat:1.7.1"
+    implementation libs.androidx.preference
+    implementation libs.androidx.appcompat
     implementation project(':osmdroid-android')
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.10"
+    implementation libs.kotlin.stdlib.jdk8
 }
 
 

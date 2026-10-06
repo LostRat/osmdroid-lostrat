@@ -34,7 +34,7 @@ dependencies {
 
     testImplementation libs.junit.vintage.engine
     api  project(':osmdroid-android')
-    api 'com.github.spyhunter99:jdbf:2.2.4'
+    api libs.jdbf
 
 }
 
