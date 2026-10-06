@@ -2,7 +2,7 @@ package org.osmdroid.util;
 
 import android.graphics.Rect;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.junit.Test;
 

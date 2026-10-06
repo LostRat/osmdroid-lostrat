@@ -3,8 +3,8 @@ package tests;
 import org.junit.Test;
 import org.nocrala.tools.gis.data.esri.shapefile.util.HexaUtil;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class HexaTests {
     @Test

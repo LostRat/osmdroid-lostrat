@@ -7,9 +7,9 @@ import org.nocrala.tools.gis.data.esri.shapefile.util.HexaUtil;
 
 import java.nio.ByteBuffer;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertTrue;
-import static junit.framework.Assert.fail;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 
 public class DoubleTests {
@@ -47,20 +47,20 @@ public class DoubleTests {
         // Special deserialize cases
 
         try {
-            assertEquals(0, deserBe(null));
+            assertEquals(0, deserBe(null), 0.0);
             fail();
         } catch (Exception e) {
             // ok
         }
 
         try {
-            assertEquals(0, deserBe(new byte[]{0, 0, 0}));
+            assertEquals(0, deserBe(new byte[]{0, 0, 0}), 0.0);
             fail();
         } catch (Exception e) {
             // ok
         }
 
-        assertEquals(0.0, deserBe(new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0}));
+        assertEquals(0.0, deserBe(new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0}), 0.0);
 
     }
 
@@ -98,20 +98,20 @@ public class DoubleTests {
         // Special deserialize cases
 
         try {
-            assertEquals(0, deserLe(null));
+            assertEquals(0, deserLe(null), 0.0);
             fail();
         } catch (Exception e) {
             // ok
         }
 
         try {
-            assertEquals(0, deserLe(new byte[]{0, 0, 0}));
+            assertEquals(0, deserLe(new byte[]{0, 0, 0}), 0.0);
             fail();
         } catch (Exception e) {
             // ok
         }
 
-        assertEquals(0.0, deserLe(new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0}));
+        assertEquals(0.0, deserLe(new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0}), 0.0);
 
     }
 
@@ -129,7 +129,7 @@ public class DoubleTests {
 
     private void assertBe(final byte[] serialized, final double value) {
         assertTrue(equals(serialized, serBe(value)));
-        assertEquals(value, deserBe(serialized));
+        assertEquals(value, deserBe(serialized), 0.0);
     }
 
     // Utils Le
@@ -146,7 +146,7 @@ public class DoubleTests {
 
     private void assertLe(final byte[] serialized, final double value) {
         assertTrue(equals(serialized, serLe(value)));
-        assertEquals(value, deserLe(serialized));
+        assertEquals(value, deserLe(serialized), 0.0);
     }
 
     private void assertLe(final String hexaSerialized, final double value,

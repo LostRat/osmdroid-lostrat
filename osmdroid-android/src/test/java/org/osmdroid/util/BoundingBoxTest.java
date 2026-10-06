@@ -4,7 +4,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.osmdroid.views.MapView;
 
-import static junit.framework.Assert.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author Fabrice Fontaine

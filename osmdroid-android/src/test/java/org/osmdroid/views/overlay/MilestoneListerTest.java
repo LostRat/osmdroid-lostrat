@@ -1,6 +1,6 @@
 package org.osmdroid.views.overlay;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.junit.Test;
 import org.osmdroid.views.overlay.milestones.MilestoneLister;

@@ -2,7 +2,7 @@ package org.osmdroid.views.overlay;
 
 import android.graphics.Path;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.junit.Test;
 import org.osmdroid.util.GeoPoint;
