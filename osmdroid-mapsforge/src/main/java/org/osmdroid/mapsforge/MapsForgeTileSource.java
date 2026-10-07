@@ -100,6 +100,10 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
             xmlRenderTheme = loadDefaultThemeFromAssets();
         }
 
+        // Line widths are fixed when the theme parses, so set the scale the cache key
+        // assumes before the parse thread starts, not after the constructor returns.
+        model.setUserScaleFactor(MapsForgeTileCacheKeys.currentRenderScale());
+
         // Create theme future
         if (xmlRenderTheme != mXmlRenderTheme || theme == null) {
             theme = new RenderThemeFuture(AndroidGraphicFactory.INSTANCE, xmlRenderTheme, model);
@@ -356,18 +360,27 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
     /**
      * Set custom user scale factor (overrides automatic density scaling)
      */
-    public void setUserScaleFactor(float scaleFactor) {
+    public synchronized void setUserScaleFactor(float scaleFactor) {
+        if (scaleFactor == model.getUserScaleFactor()) {
+            return;
+        }
         model.setUserScaleFactor(scaleFactor);
+        // The parsed theme holds line widths at the old scale; parse it again.
+        if (theme != null) {
+            theme.decrementRefCount();
+            theme = new RenderThemeFuture(AndroidGraphicFactory.INSTANCE, mXmlRenderTheme, model);
+            new Thread(theme).start();
+        }
         Log.d(IMapView.LOGTAG, "MapForge scale factor set to: " + scaleFactor);
     }
-    
+
     /**
      * Apply automatic density-aware scaling (recommended)
      */
     public void applyDensityScaling() {
         if (DisplayDensityManager.isInitialized()) {
             float autoScale = DisplayDensityManager.getInstance().getMapForgeScaleFactor();
-            model.setUserScaleFactor(autoScale);
+            setUserScaleFactor(autoScale);
             Log.d(IMapView.LOGTAG, "Applied automatic MapForge scaling: " + autoScale + 
                     " for density: " + DisplayDensityManager.getInstance().getDensityCategory());
         }

@@ -25,6 +25,9 @@ public final class MapsForgeTileCacheKeys {
     private static final String DEFAULT_THEME = "default-theme";
     private static final int MAX_READABLE_LENGTH = 96;
     private static final int HASH_LENGTH = 12;
+    // Bump when tiles cached under a key no longer match what that key renders. r2: themes
+    // used to parse before the user scale was set, caching lines up to 3x too wide.
+    private static final String RENDER_REVISION = "r2";
 
     private MapsForgeTileCacheKeys() {
     }
@@ -157,6 +160,7 @@ public final class MapsForgeTileCacheKeys {
                                     final String textPart) {
         try {
             final MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            updateDigest(digest, RENDER_REVISION);
             updateDigest(digest, themeName);
             updateDigest(digest, Float.toString(renderScale));
             updateDigest(digest, variant);
