@@ -330,31 +330,13 @@ public class StorageUtils {
      */
     private static StorageInfo getBestPrivateStorage(final Context context) {
         StorageInfo bestStorage = null;
-        
-        // 1. Try app-specific external directories first (no permissions needed)
-        File[] externalDirs = context.getExternalFilesDirs(null);
-        if (externalDirs != null) {
-            for (File externalDir : externalDirs) {
-                if (externalDir != null && isWritable(externalDir)) {
-                    String state = Environment.getExternalStorageState(externalDir);
-                    if (Environment.MEDIA_MOUNTED.equals(state)) {
-                        StorageInfo storage = new StorageInfo(externalDir.getAbsolutePath(), false, false, -1);
-                        if (bestStorage == null || storage.freeSpace > bestStorage.freeSpace) {
-                            bestStorage = storage;
-                        }
-                    }
-                }
-            }
+
+        // Private app storage only (always available)
+        File internalDir = context.getFilesDir();
+        if (internalDir != null && isWritable(internalDir)) {
+            bestStorage = new StorageInfo(internalDir.getAbsolutePath(), true, false, -1);
         }
-        
-        // 2. Fallback to internal app storage (always available)
-        if (bestStorage == null) {
-            File internalDir = context.getFilesDir();
-            if (internalDir != null && isWritable(internalDir)) {
-                bestStorage = new StorageInfo(internalDir.getAbsolutePath(), true, false, -1);
-            }
-        }
-        
+
         return bestStorage;
     }
 

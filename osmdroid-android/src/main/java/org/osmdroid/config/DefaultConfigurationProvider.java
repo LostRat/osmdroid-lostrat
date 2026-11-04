@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.Environment;
 import android.util.Log;
 
 import org.osmdroid.api.IMapView;
@@ -254,29 +253,11 @@ public class DefaultConfigurationProvider implements IConfigurationProvider {
 
     @Override
     public File getOsmdroidBasePath(Context context) {
-        try {
-            if (osmdroidBasePath == null) {
-                StorageUtils.StorageInfo storageInfo = StorageUtils.getBestWritableStorage(context);
-                if (storageInfo != null) {
-                    String pathToStorage = storageInfo.path;
-                    osmdroidBasePath = new File(pathToStorage, "osmdroid");
-                    osmdroidBasePath.mkdirs();
-                } else {
-                    File osmdroidBasePath = new File(context.getExternalFilesDir(
-                            Environment.DIRECTORY_PICTURES), "osmdroid");
-                    if (!osmdroidBasePath.mkdirs()) {
-                        Log.e(IMapView.LOGTAG, "Directory not created");
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            Log.d(IMapView.LOGTAG, "Unable to create base path at " + osmdroidBasePath, ex);
-            //IO/permissions issue
-            //trap for android studio layout editor and some for certain devices
-            //see https://github.com/osmdroid/osmdroid/issues/508
+        // Private app storage only; shared and external storage are never valid for the cache.
+        if (osmdroidBasePath == null && context != null) {
+            osmdroidBasePath = new File(context.getFilesDir(), "osmdroid");
+            osmdroidBasePath.mkdirs();
         }
-        if (osmdroidBasePath==null && context!=null)
-            osmdroidBasePath =  context.getFilesDir();
         return osmdroidBasePath;
     }
 
@@ -329,7 +310,9 @@ public class DefaultConfigurationProvider implements IConfigurationProvider {
 
         //check to see if the shared preferences is set for the tile cache
         String basePathStr= prefs.getString("osmdroid.basePath", null);
-        if (basePathStr==null || !new File(basePathStr).exists()) {
+        String privateRoot = ctx.getFilesDir().getAbsolutePath();
+        if (basePathStr==null || !new File(basePathStr).exists() || !basePathStr.startsWith(privateRoot)
+                || !prefs.getString("osmdroid.cachePath", "").startsWith(privateRoot)) {
             //this is the first time startup. run the discovery bit
             File discoveredBasePath = getOsmdroidBasePath(ctx);
             File discoveredCachePath = getOsmdroidTileCache(ctx);
