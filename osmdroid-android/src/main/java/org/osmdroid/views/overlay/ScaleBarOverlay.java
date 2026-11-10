@@ -107,6 +107,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     public enum TextSize { SMALLEST, SMALLER, NORMAL, LARGER, LARGEST }
     private TextSize mTextSizeOption = TextSize.NORMAL;
     private boolean mDensityScalingEnabled = true;
+    private float mMaxFontScale = 1.3f; // system font scale above this does not grow the label
     private float mCornerRadius = 4f;
     private boolean mTextBackgroundEnabled = true;
     private int mTextColor = Color.WHITE;
@@ -508,22 +509,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         textPaint.getTextBounds(xMsg, 0, xMsg.length(), sTextBoundsRect);
         final int xTextSpacing = (int) (sTextBoundsRect.height() / 5.0);
 
-        // Apply density-aware text scaling with size option
-        Paint scaledTextPaint = new Paint(textPaint);
-        float baseSize = textPaint.getTextSize();
-
-        // Apply text size multiplier
-        float sizeMultiplier = getTextSizeMultiplier();
-        baseSize *= sizeMultiplier;
-
-        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
-            baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
-        }
-        scaledTextPaint.setTextSize(baseSize);
-        scaledTextPaint.setColor(mTextColor);
-
-        // Recalculate text bounds with scaled text
-        scaledTextPaint.getTextBounds(xMsg, 0, xMsg.length(), sTextBoundsRect);
+        final Paint scaledTextPaint = labelPaint(xMsg, xBarLengthPixels, sTextBoundsRect);
 
         float x = xBarLengthPixels / 2 - sTextBoundsRect.width() / 2;
         if (alignRight) x += screenWidth - xBarLengthPixels;
@@ -568,22 +554,7 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
         textPaint.getTextBounds(yMsg, 0, yMsg.length(), sTextBoundsRect);
         final int yTextSpacing = (int) (sTextBoundsRect.height() / 5.0);
 
-        // Apply density-aware text scaling with size option
-        Paint scaledTextPaint = new Paint(textPaint);
-        float baseSize = textPaint.getTextSize();
-
-        // Apply text size multiplier
-        float sizeMultiplier = getTextSizeMultiplier();
-        baseSize *= sizeMultiplier;
-
-        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
-            baseSize = DisplayDensityManager.getInstance().getScaledTextSize(baseSize);
-        }
-        scaledTextPaint.setTextSize(baseSize);
-        scaledTextPaint.setColor(mTextColor);
-
-        // Recalculate text bounds with scaled text
-        scaledTextPaint.getTextBounds(yMsg, 0, yMsg.length(), sTextBoundsRect);
+        final Paint scaledTextPaint = labelPaint(yMsg, yBarLengthPixels, sTextBoundsRect);
 
         float x;
         if (alignRight) {
@@ -852,6 +823,15 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     }
 
     /**
+     * Cap the system font scale the label follows (default 1.3); 0 or less removes the cap.
+     * Applies only with density scaling, the only path where font scale sizes the label.
+     */
+    public void setMaxFontScale(float maxFontScale) {
+        mMaxFontScale = maxFontScale;
+        lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
      * Check if density scaling is enabled
      */
     public boolean isDensityScalingEnabled() {
@@ -973,6 +953,30 @@ public class ScaleBarOverlay extends Overlay implements GeoConstants {
     public void setBarHaloWidth(float extraWidthPx) {
         mBarHaloExtraWidth = Math.max(0f, extraWidthPx);
         lastZoomLevel = -1; // Force redraw
+    }
+
+    /**
+     * Label paint: size option, density scaling and the font-scale cap, then shrunk so the
+     * label and its background fit between the bar's end posts. Fills bounds for msg.
+     */
+    private Paint labelPaint(final String msg, final int barLengthPixels, final Rect bounds) {
+        float size = textPaint.getTextSize() * getTextSizeMultiplier();
+        if (mDensityScalingEnabled && DisplayDensityManager.isInitialized()) {
+            final DisplayDensityManager ddm = DisplayDensityManager.getInstance();
+            size = ddm.getScaledTextSize(size);
+            final float fontScale = ddm.getScaledDensity() / ddm.getDensity();
+            if (mMaxFontScale > 0 && fontScale > mMaxFontScale) size *= mMaxFontScale / fontScale;
+        }
+        final Paint paint = new Paint(textPaint);
+        paint.setTextSize(size);
+        paint.setColor(mTextColor);
+        paint.getTextBounds(msg, 0, msg.length(), bounds);
+        final float room = barLengthPixels - 2 * (6f + mBarHaloExtraWidth); // 6f = background padding
+        if (room > 0 && bounds.width() > room) {
+            paint.setTextSize(size * room / bounds.width());
+            paint.getTextBounds(msg, 0, msg.length(), bounds);
+        }
+        return paint;
     }
 
     private float getTextSizeMultiplier() {
