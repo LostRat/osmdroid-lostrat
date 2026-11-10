@@ -4,11 +4,13 @@ import android.content.Context;
 import androidx.core.text.HtmlCompat;
 import android.text.Spanned;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
 import org.osmdroid.api.IMapView;
+import org.osmdroid.library.R;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.OverlayWithIW;
@@ -52,11 +54,37 @@ public class BasicInfoWindow extends InfoWindow {
         }
     }
 
+    private static float sMaxFontScale = 1.5f; // system font scale above this does not grow the bubble text
+
+    /**
+     * Cap the system font scale the stock bubble (bonuspack_bubble) follows (default 1.5).
+     * Its title, description and sub-description all grow with the font scale up to the cap.
+     * 0 or less keeps the layout's own sizes: title uncapped, descriptions fixed.
+     * Applies to bubbles created afterwards.
+     */
+    public static void setMaxFontScale(float maxFontScale) {
+        sMaxFontScale = maxFontScale;
+    }
+
+    private void setTextSizeDp(int id, float dp) {
+        final View v = mView.findViewById(id);
+        if (v instanceof TextView)
+            ((TextView) v).setTextSize(TypedValue.COMPLEX_UNIT_DIP, dp);
+    }
+
     public BasicInfoWindow(int layoutResId, MapView mapView) {
         super(layoutResId, mapView);
 
         if (mTitleId == UNDEFINED_RES_ID)
             setResIds(mapView.getContext());
+
+        if (layoutResId == R.layout.bonuspack_bubble && sMaxFontScale > 0) {
+            final float scale = Math.min(
+                    mapView.getResources().getConfiguration().fontScale, sMaxFontScale);
+            setTextSizeDp(mTitleId, 14 * scale);
+            setTextSizeDp(mDescriptionId, 12 * scale);
+            setTextSizeDp(mSubDescriptionId, 10 * scale);
+        }
 
         //default behavior: close it when clicking on the bubble:
         mView.setOnTouchListener(new View.OnTouchListener() {
