@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector MBTiles (MVT) as a MapsForge data store — November 16, 2026</title>
+<style>:root{color-scheme:light dark}body{font:16px/1.55 system-ui,sans-serif;max-width:65rem;margin:2rem auto;padding:0 1rem}pre{padding:1rem;background:#8882;overflow:auto}code{font-family:monospace}table{border-collapse:collapse}td,th{padding:.5rem;border:1px solid #8887;text-align:left;vertical-align:top}</style></head><body>
+<h1>Vector MBTiles (MVT) as a MapsForge data store</h1>
+<p>November 16, 2026 · 7.0.3-lostrat-SNAPSHOT · New module <code>osmdroid-mapsforge-mvt</code>, glue in <code>osmdroid-mapsforge</code>, test in TestOsmdroidLostRat. Nothing is committed; a commit plan is at the end.</p>
+
+<h2>What it does</h2>
+<p>An <code>.mbtiles</code> file of Mapbox Vector Tiles in the OpenMapTiles schema (tilemaker output from an OSM <code>.pbf</code>) is opened as a MapsForge <code>MapDataStore</code>. The stock MapsForge renderer and the existing render-theme XML then draw it exactly as they draw a <code>.map</code> file: no new renderer, no theme changes. The Java code follows the Swift <code>MapsforgeVectorTiles</code> module of the OsmMap macOS/iOS app.</p>
+<p>Because each file is its own data store, MapsForge's <code>MultiMapDataStore</code> combines them. A base map and a contour file are two stores, and a <code>.map</code> file can be mixed with a vector contour file, so contour lines no longer have to be merged into the <code>.pbf</code> before a <code>.map</code> is written.</p>
+
+<h2>Use</h2>
+<pre><code>MapsForgeTileSource.createInstance(application);          // once
+
+File[] files = { baseMbtiles, contourMbtiles };              // or { portlandMap, contourMbtiles }
+Arrays.sort(files);                                          // cache key depends on order
+String cacheName = MapsForgeTileCacheKeys.forMapsAndTheme(files, "default-path-contour");
+MapsForgeTileSource source = MapsForgeTileSource.createFromFiles(files, theme, cacheName);
+source.applyDensityScaling();
+mapView.setTileProvider(new MapsForgeTileProvider(new SimpleRegisterReceiver(context), source));</code></pre>
+<p><code>createFromFiles</code> opens any file whose name ends in <code>.mbtiles</code> as vector tiles and everything else as a <code>.map</code> file. An app that already passes its files to <code>createFromFiles</code> needs no other change. A raster <code>.mbtiles</code> file is rejected with an <code>IllegalArgumentException</code>.</p>
+<table><tr><th>API</th><th>Purpose</th></tr>
+<tr><td><code>MapsForgeTileSource.createFromFiles(File[], ...)</code></td><td>Unchanged signature; now accepts <code>.map</code> and vector <code>.mbtiles</code> in any mix.</td></tr>
+<tr><td><code>MapsForgeTileSource.openDataStore(File, language)</code></td><td>One file as a <code>MapDataStore</code>.</td></tr>
+<tr><td><code>MapsForgeTileSource.createFromDataStores(MapDataStore[], ...)</code></td><td>Tile source over stores the app opened itself.</td></tr>
+<tr><td><code>MvtMapDataStore(VectorTileArchive [, cacheCoordinates])</code></td><td>The data store. <code>setTrailBackfill(boolean)</code>, default on.</td></tr>
+<tr><td><code>AndroidMbtilesArchive(File)</code></td><td>MBTiles through Android SQLite, read-only.</td></tr>
+<tr><td><code>MvtDirectRenderer</code>, <code>MvtStandardRenderer</code></td><td>Stock renderers that draw only the text of label-only ways. <code>MapsForgeTileSource</code> uses them for every source.</td></tr></table>
+
+<h2>Data store and tile cache are two different things</h2>
+<p>The data store is the source of map features: it stands where the <code>.map</code> file reader stood. The SQLite tile cache (<code>SqlTileWriter</code>) is unchanged and still stores the rendered PNG tiles. The path of a tile is:</p>
+<pre><code>memory cache → SqlTileWriter cache (rendered PNG) → MapsForge render ← MultiMapDataStore ← .map / .mbtiles</code></pre>
+<table><tr><th>Concern</th><th>Choice</th></tr>
+<tr><td>Durability</td><td>The <code>.mbtiles</code> file is opened read-only and never written, so it cannot be damaged by a crash. Rendered tiles persist in the existing <code>SqlTileWriter</code> database, keyed by file name, size, modification time, theme and scale, so a replaced map file never shows stale tiles.</td></tr>
+<tr><td>Speed</td><td>A tile is rendered once and then comes from the PNG cache. Decoded source tiles are kept in memory because one z14 tile serves 16 tiles at z16 and 256 at z18, and the label pass reads a 3x3 block for every tile. An area read returns each way once (3,698 ways for a 3x3 block at z16, against 5,466 read tile by tile).</td></tr>
+<tr><td>Memory</td><td>The decoded-tile cache is bounded by coordinate count, not tile count: 500,000 coordinates, about 27 MB when full, sized to hold the densest 3x3 block of z14 tiles in central Portland (423,402 coordinates). Tag objects and identical tag lists are shared between ways. The trail cache may add up to half as much. Pass a smaller budget to the <code>MvtMapDataStore</code> constructor to trade speed for memory.</td></tr>
+<tr><td>Flicker</td><td>Nothing new is drawn on the map view: tiles go through the same <code>MapsForgeTileProvider</code> as <code>.map</code> tiles, and osmdroid keeps showing the rescaled old tiles while new ones render. See the emulator results below.</td></tr></table>
+
+<h2>How the vector tiles are read</h2>
+<ul>
+<li><b>Tag mapping.</b> <code>OpenMapTilesTags</code> turns OpenMapTiles layers and attributes back into OSM tags (<code>transportation</code> class <code>path</code> becomes <code>highway=path</code>, the custom <code>contour</code> layer becomes <code>contour_ext=elevation_major|medium|minor</code> with <code>ele</code>, and so on), which is why the themes need no change.</li>
+<li><b>Label-only ways.</b> OpenMapTiles carries road names on separate lines (<code>transportation_name</code>). These become <code>LabelOnlyWay</code>s: the renderers run only caption and path-text instructions for them. With the plain <code>DirectRenderer</code> the name lines are stroked a second time and fill the gaps of dashed trails (28,781 pixels differ in one z16 test block).</li>
+<li><b>Overzoom.</b> Above the file's deepest zoom (14) the ancestor tile is used and only ways meeting the requested tile plus a margin are returned.</li>
+<li><b>Trail backfill.</b> Tilemaker's config holds paths and footways only at z14 and tracks from z13, but the theme shows trails from z12. For z12 and z13 the missing trails are taken from the z14 tiles underneath, decoding only the two transportation layers. Off for files without a <code>transportation</code> layer.</li>
+<li><b>Points.</b> A POI belongs to the one tile that contains it, with a minimum zoom per kind.</li>
+<li><b>Damage.</b> A corrupt tile gives what could be decoded; <code>readMapData</code> never throws.</li>
+</ul>
+
+<h2>Module layout</h2>
+<p><code>osmdroid-mapsforge-mvt</code> depends on MapsForge only and imports no <code>org.osmdroid</code> class outside its own package, so it can be lifted into a project of its own later. <code>osmdroid-mapsforge</code> depends on it with <code>api</code>, so apps get it without a new dependency line. Its POM licence follows <code>osmdroid-mapsforge</code> (LGPLv3, as it links MapsForge); change <code>osmdroid-mapsforge-mvt/gradle.properties</code> if you want another.</p>
+
+<h2>Verification</h2>
+<table><tr><th>Check</th><th>Result</th></tr>
+<tr><td><code>:osmdroid-mapsforge-mvt:testDebugUnitTest</code></td><td>46 tests pass: 34 on hand-built bytes, 12 against the real files in <code>E:\202610-mbtiles</code> (skipped when that folder is missing; override with <code>-Pmvt.testdata=...</code>). Includes the known layer counts of forest-park tile 14/2605/5855 and JVM renders with the AWT backend, written to <code>osmdroid-mapsforge-mvt/build/mvt-render/</code>.</td></tr>
+<tr><td><code>:osmdroid-mapsforge:testDebugUnitTest</code></td><td>7 tests pass.</td></tr>
+<tr><td><code>:osmdroid-mapsforge-mvt:lintDebug</code></td><td>No issues (no API above 23 used).</td></tr>
+<tr><td><code>publishToMavenLocal</code></td><td>All library modules published as 7.0.3-lostrat-SNAPSHOT, including <code>osmdroid-mapsforge-mvt</code>.</td></tr>
+<tr><td>TestOsmdroidLostRat <code>MvtForestParkInstrumentedTest</code>, Pixel 9 emulator</td><td>4 tests pass: tiles render at z10 to z19; the contour file reads as <code>contour_ext</code> ways; contours change 6,576 pixels of a vector base tile and 3,175 pixels of a <code>.map</code> tile.</td></tr>
+<tr><td>TestOsmdroidLostRat app, Pixel 9 emulator</td><td>New map source "FOREST_PARK_MVT_CONTOURS" draws trails, roads, buildings, water, contours and labels. First display renders from scratch (loading tiles for about a second); pan and double-tap zoom showed no blank frames; switching away and back showed the map in the first screenshot (0.4 s) from the tile cache.</td></tr>
+<tr><td>Speed, JVM on the build PC</td><td>Heaviest Portland tile (336 KB unpacked, 6,288 ways): 2.8 ms read and decode, 2.2 ms convert.</td></tr>
+<tr><td>Speed, emulator, first render of one tile</td><td>About 0.1 s at z15 to z19, 0.4 s at z14, 0.7 s at z13, 1.7 s at z12 (trail backfill).</td></tr></table>
+
+<h2>Known limits</h2>
+<ul>
+<li><b>Labels of cut lines.</b> A river or road cut at tile edges gets a label per piece, so at z12 two can butt together ("Willamette RiveWillamette River"). The Swift app has the same behaviour; joining pieces with equal tags would fix it.</li>
+<li><b>Precision above z18.</b> z14 tiles at extent 4096 give one unit per pixel at z18. Contours and buildings look angular at z19 and beyond. This is a property of the data.</li>
+<li><b>Custom layers.</b> The <code>buildings-addr</code> and <code>cemetery</code> files use their own schemas and are not mapped yet; <code>full</code>, <code>drop</code> and <code>contour</code> are.</li>
+<li><b>Tile size.</b> On Android before API 28 a single tile blob is limited to 2 MB by the cursor window. The largest tile in the test files is 206 KB.</li>
+<li><b>Test map.</b> The Portland <code>.map</code> in the test app already contains contours, so the ".map + vector contours" source shows both sets inside Forest Park.</li>
+</ul>
+
+<h2>Files</h2>
+<table><tr><th>Repository</th><th>Change</th></tr>
+<tr><td>osmdroid-lostrat</td><td>New <code>osmdroid-mapsforge-mvt/</code> (11 main classes, tests); <code>settings.gradle</code>; <code>gradle/libs.versions.toml</code> (<code>mapsforge-map-awt</code>, tests only); <code>osmdroid-mapsforge/build.gradle</code>; <code>MapsForgeTileSource.java</code>; docs.</td></tr>
+<tr><td>TestOsmdroidLostRat</td><td><code>settings.gradle.kts</code> (Maven Local for <code>com.github.lostrat</code>); <code>app/build.gradle.kts</code> (7.0.3 SNAPSHOT); <code>MainActivity.java</code> (two map sources); <code>MvtForestParkInstrumentedTest.java</code>; <code>assets/mvt/</code> (forest-park full 4.8 MB and contour 0.6 MB).</td></tr></table>
+
+<h2>Commit plan</h2>
+<ol>
+<li>osmdroid-lostrat: <code>feat(mapsforge-mvt): vector MBTiles as a MapsForge data store</code> — the new module, <code>settings.gradle</code>, the catalog line.</li>
+<li>osmdroid-lostrat: <code>feat(mapsforge): open .mbtiles vector files and mixed data stores in MapsForgeTileSource</code> — <code>osmdroid-mapsforge</code> changes.</li>
+<li>osmdroid-lostrat: <code>docs: vector MBTiles report, changelog, README</code>.</li>
+<li>TestOsmdroidLostRat: <code>test: Forest Park vector MBTiles with contours</code> — after the fork is tagged, switch the dependency back from Maven Local to the tag.</li>
+</ol>
+</body></html>

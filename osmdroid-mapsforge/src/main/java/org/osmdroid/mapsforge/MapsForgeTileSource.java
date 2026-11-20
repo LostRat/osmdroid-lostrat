@@ -11,6 +11,7 @@ import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.Tile;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.graphics.AndroidTileBitmap;
+import org.mapsforge.map.datastore.MapDataStore;
 import org.mapsforge.map.datastore.MapReadResult;
 import org.mapsforge.map.datastore.MultiMapDataStore;
 import org.mapsforge.map.layer.hills.HillsRenderConfig;
@@ -25,6 +26,10 @@ import org.mapsforge.map.rendertheme.StreamRenderTheme;
 import org.mapsforge.map.rendertheme.rule.RenderThemeFuture;
 import org.mapsforge.map.layer.labels.MapDataStoreLabelStore;
 import org.osmdroid.api.IMapView;
+import org.osmdroid.mapsforge.mvt.MvtDirectRenderer;
+import org.osmdroid.mapsforge.mvt.MvtMapDataStore;
+import org.osmdroid.mapsforge.mvt.MvtStandardRenderer;
+import org.osmdroid.mapsforge.mvt.android.AndroidMbtilesArchive;
 import org.osmdroid.tileprovider.tilesource.BitmapTileSourceBase;
 import org.osmdroid.util.DisplayDensityManager;
 import org.osmdroid.util.MapTileIndex;
@@ -37,6 +42,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Adapted from code from here: https://github.com/MKergall/osmbonuspack, which is LGPL
@@ -76,6 +82,9 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
 
     private MultiMapDataStore mapDatabase;
 
+    // Tiles keep an alpha channel and get no map background: the source is a layer over others.
+    private volatile boolean transparent;
+
     /**
      * Main constructor
      */
@@ -83,12 +92,25 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
                                   int tileSizePixels, FileInputStream[] fileInputStream, XmlRenderTheme xmlRenderTheme,
                                   MultiMapDataStore.DataPolicy dataPolicy, HillsRenderConfig hillsRenderConfig,
                                   final String language) {
+        this(cacheTileSourceName, minZoom, maxZoom, tileSizePixels, toMapFiles(fileInputStream, language),
+                xmlRenderTheme, dataPolicy, hillsRenderConfig);
+    }
+
+    /**
+     * Constructor over already opened data stores: Mapsforge {@code .map} files, vector
+     * MBTiles ({@link MvtMapDataStore}) or a mix of them, drawn together with one theme.
+     *
+     * @since 7.0.3-lostrat
+     */
+    protected MapsForgeTileSource(String cacheTileSourceName, int minZoom, int maxZoom,
+                                  int tileSizePixels, MapDataStore[] dataStores, XmlRenderTheme xmlRenderTheme,
+                                  MultiMapDataStore.DataPolicy dataPolicy, HillsRenderConfig hillsRenderConfig) {
 
         super(cacheTileSourceName, minZoom, maxZoom, tileSizePixels, ".png", "© OpenStreetMap contributors");
 
         mapDatabase = new MultiMapDataStore(dataPolicy);
-        for (int i = 0; i < fileInputStream.length; i++) {
-            mapDatabase.addMapDataStore(new MapFile(fileInputStream[i], language), false, false);
+        for (MapDataStore dataStore : dataStores) {
+            mapDatabase.addMapDataStore(dataStore, false, false);
         }
 
         if (AndroidGraphicFactory.INSTANCE == null) {
@@ -114,8 +136,10 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
         // Labels are drawn from this store, not from the tile's own RendererJob, so it must
         // use the same per-zoom text scale. Body mirrors MapDataStoreLabelStore.getVisibleItems
         // (Mapsforge 0.30.0) with the fixed textScale swapped for textScaleForZoom().
+        // The Mvt renderers draw only the text of a vector tile's label-only ways (road names
+        // come apart from the roads there); for .map data they behave as their superclasses.
         final StandardRenderer labelRenderer =
-                new StandardRenderer(mapDatabase, AndroidGraphicFactory.INSTANCE, true);
+                new MvtStandardRenderer(mapDatabase, AndroidGraphicFactory.INSTANCE, true);
         MapDataStoreLabelStore labelStore = new MapDataStoreLabelStore(
                 mapDatabase, theme, scale, model, AndroidGraphicFactory.INSTANCE) {
             @Override
@@ -136,7 +160,7 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
             }
         };
 
-        renderer = new DirectRenderer(
+        renderer = new MvtDirectRenderer(
                 mapDatabase,
                 AndroidGraphicFactory.INSTANCE,
                 labelStore,
@@ -237,6 +261,26 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
     public static MapsForgeTileSource createFromFiles(File[] file, XmlRenderTheme theme, String themeName,
                                                       MultiMapDataStore.DataPolicy dataPolicy, HillsRenderConfig hillsRenderConfig, final String language) {
 
+        // Any vector MBTiles file in the list: open every file as a data store instead.
+        for (File f : file) {
+            if (isVectorTileArchive(f)) {
+                MapDataStore[] dataStores = new MapDataStore[file.length];
+                try {
+                    for (int i = 0; i < file.length; i++) {
+                        dataStores[i] = openDataStore(file[i], language);
+                    }
+                } catch (RuntimeException e) {
+                    for (MapDataStore opened : dataStores) {   // one file failed: close the others
+                        if (opened != null) {
+                            opened.close();
+                        }
+                    }
+                    throw e;
+                }
+                return createFromDataStores(dataStores, theme, themeName, dataPolicy, hillsRenderConfig);
+            }
+        }
+
         FileInputStream[] fileInputStream = convertFilesToInputStreams(file);
         return new MapsForgeTileSource(themeName != null ? themeName : "mapsforge",
                 MIN_ZOOM, MAX_ZOOM, TILE_SIZE_PIXELS, fileInputStream, theme, dataPolicy, hillsRenderConfig, language);
@@ -273,6 +317,63 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
                 MIN_ZOOM, MAX_ZOOM, TILE_SIZE_PIXELS, fileInputStream, theme, dataPolicy, hillsRenderConfig, language);
     }
 
+    /**
+     * Creates a tile source over already opened data stores, drawn together with one theme.
+     * {@link #openDataStore(File, String)} opens a {@code .map} or a vector {@code .mbtiles}
+     * file. The stores are closed by {@link #dispose()}.
+     *
+     * @since 7.0.3-lostrat
+     */
+    public static MapsForgeTileSource createFromDataStores(MapDataStore[] dataStores, XmlRenderTheme theme, String themeName,
+                                                           MultiMapDataStore.DataPolicy dataPolicy, HillsRenderConfig hillsRenderConfig) {
+        return new MapsForgeTileSource(themeName != null ? themeName : "mapsforge",
+                MIN_ZOOM, MAX_ZOOM, TILE_SIZE_PIXELS, dataStores, theme, dataPolicy, hillsRenderConfig);
+    }
+
+    /**
+     * Opens one map data file: a vector MBTiles file (name ending in {@code .mbtiles}, holding
+     * Mapbox Vector Tiles in the OpenMapTiles schema, e.g. from tilemaker) as a
+     * {@link MvtMapDataStore}, anything else as a Mapsforge {@code .map} file. The file is
+     * only read, never written.
+     *
+     * @throws IllegalArgumentException if an MBTiles file cannot be opened or holds raster tiles
+     * @since 7.0.3-lostrat
+     */
+    public static MapDataStore openDataStore(File file, String language) {
+        if (!isVectorTileArchive(file)) {
+            return new MapFile(file, language);
+        }
+        final AndroidMbtilesArchive archive;
+        try {
+            archive = new AndroidMbtilesArchive(file);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Cannot open MBTiles file " + file, e);
+        }
+        if (!archive.isVector()) {
+            archive.close();
+            throw new IllegalArgumentException(file
+                    + " holds raster tiles; only vector tiles (format pbf) can be drawn with a render theme");
+        }
+        return new MvtMapDataStore(archive);
+    }
+
+    /**
+     * True for a file {@link #openDataStore(File, String)} opens as vector MBTiles, judged by its name.
+     *
+     * @since 7.0.3-lostrat
+     */
+    public static boolean isVectorTileArchive(File file) {
+        return file != null && file.getName().toLowerCase(Locale.US).endsWith(".mbtiles");
+    }
+
+    private static MapDataStore[] toMapFiles(FileInputStream[] fileInputStream, String language) {
+        MapDataStore[] mapFiles = new MapDataStore[fileInputStream.length];
+        for (int i = 0; i < fileInputStream.length; i++) {
+            mapFiles[i] = new MapFile(fileInputStream[i], language);
+        }
+        return mapFiles;
+    }
+
     public BoundingBox getBounds() {
         return mapDatabase.boundingBox();
     }
@@ -295,7 +396,7 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
 
         try {
             RendererJob mapGeneratorJob = new RendererJob(tile, mapDatabase, theme, model,
-                    textScaleForZoom(tile.zoomLevel), false, false);
+                    textScaleForZoom(tile.zoomLevel), transparent, false);
             AndroidTileBitmap bmp = (AndroidTileBitmap) renderer.executeJob(mapGeneratorJob);
             if (bmp != null) {
                 return new BitmapDrawable(sResources, AndroidGraphicFactory.getBitmap(bmp));
@@ -306,7 +407,24 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
         return null;
     }
 
-    public void dispose() {
+    /**
+     * Render tiles with an alpha channel and without the theme's map background, so this source
+     * can be drawn as a layer over another map, e.g. a theme of contour lines only over
+     * hillshade. Set it before the first tile is rendered, and give the tile cache name a
+     * variant ({@link MapsForgeTileCacheKeys#forMapsThemeAndVariant}): cached tiles keep the
+     * background they were rendered with.
+     *
+     * @since 7.0.3-lostrat
+     */
+    public void setTransparent(boolean transparent) {
+        this.transparent = transparent;
+    }
+
+    /**
+     * Closes the data stores and releases the theme. Waits for a tile being rendered, so call
+     * it off the UI thread when the source may still be rendering.
+     */
+    public synchronized void dispose() {
         if (theme != null) {
             theme.decrementRefCount();
             theme = null;

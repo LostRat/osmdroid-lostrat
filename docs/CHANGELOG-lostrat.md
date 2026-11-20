@@ -11,6 +11,12 @@ Upstream osmdroid history remains in [CHANGELOG.md](../CHANGELOG.md) at the repo
 
 ## [Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)
 
+### Vector MBTiles (MVT)
+
+- Add module `osmdroid-mapsforge-mvt`: an `.mbtiles` file of Mapbox Vector Tiles in the OpenMapTiles schema (tilemaker output) is read as a MapsForge `MapDataStore` (`MvtMapDataStore`, `AndroidMbtilesArchive`, `VectorTile`, `OpenMapTilesTags`), so the stock renderer and existing render themes draw it like a `.map` file. Overzoom past the file's deepest zoom, trail backfill at the two zooms above it, a decoded-tile cache bounded by coordinate count (about 27 MB by default), read-only file access. The module depends on MapsForge only (2026-11-16). See [the report](2026-11-16-vector-mbtiles-mvt-report.html).
+- `MapsForgeTileSource.createFromFiles` opens files named `.mbtiles` as vector tiles and may mix them with `.map` files, e.g. a `.map` base with a vector contour file. Add `createFromDataStores`, `openDataStore` and `isVectorTileArchive`. The tile source now renders through `MvtDirectRenderer` / `MvtStandardRenderer`, which draw only the text of label-only ways (road names travel apart from roads in vector tiles) and behave as before for `.map` data. `osmdroid-mapsforge` depends on the new module with `api` (2026-11-16)
+- Add `MapsForgeTileSource.setTransparent`: tiles are rendered with an alpha channel and without the theme's map background, so a MapsForge source can be a layer over another map, e.g. a contour-only theme over a vector contour file, drawn above hillshade with no base map (2026-11-17)
+
 ### Prepared polyline batches
 
 - Add `PolylineBatch` and `DefaultOverlayManager.replacePolylineBatch` for worker-prepared geometry and linear-time UI publication, preserving unrelated overlays and explicit layer/tap ordering. Add `Polyline.attachToMap` for detached construction with deferred density/info-window setup. Includes ownership/thread checks and regression tests (2026-09-11). See [integration and verification report](2026-09-11-polyline-batch-report.html).

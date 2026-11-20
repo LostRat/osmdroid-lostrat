@@ -17,6 +17,7 @@ When you need code from a related project, **open it at its real location**:
 | osmdroid-lostrat (this fork) | `F:\OSMDROID-LOSTRAT` | Library. Publishes `com.github.lostrat:osmdroid-*` to Maven Local. |
 | Test-Osmdroid-LostRat | `F:\ANDROIDPROJECT\TestOsmdroidLostRat` | Integration test app that consumes this fork from Maven Local. |
 | upstream osmdroid clone | `F:\ANDROIDPROJECT\osmdroid` | Archived upstream, for diffing only. Do not edit. |
+| mapsforge clone | `F:\ANDROIDPROJECT\mapsforge` | Upstream MapsForge 0.30.0 sources. Local branch `iOS` holds `mapsforge-swift/`, the Swift port for iOS/macOS; its `MapsforgeVectorTiles` module is the original of `osmdroid-mapsforge-mvt`, so keep `OpenMapTilesTags` in step on both sides. Do not copy Swift code into this repo. |
 
 ## Prune copied-in reference code when you see it
 

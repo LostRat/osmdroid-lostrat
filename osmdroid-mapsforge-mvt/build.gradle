@@ -1,0 +1,78 @@
+description = "Vector MBTiles (Mapbox Vector Tiles in the OpenMapTiles schema, e.g. from tilemaker) as a Mapsforge MapDataStore, drawn with Mapsforge render themes. Depends on LGPL licensed Mapsforge"
+apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+
+group = project.property("pom.groupId")
+version = project.property("pom.version")
+
+// This module must not import org.osmdroid classes outside its own package: it depends on
+// Mapsforge only, so it can be lifted into a project of its own.
+android {
+    namespace = 'org.osmdroid.mapsforge.mvt'
+    compileSdkVersion = findProperty('android.compileSdkVersion').toInteger()
+
+    defaultConfig {
+        minSdk = 23
+    }
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+
+    testOptions {
+        unitTests.all {
+            // data-backed tests read tilemaker files from here and are skipped when it is missing:
+            // ./gradlew :osmdroid-mapsforge-mvt:testDebugUnitTest -Pmvt.testdata=D:/tiles
+            systemProperty 'mvt.testdata', (findProperty('mvt.testdata') ?: 'E:/202610-mbtiles')
+            systemProperty 'mvt.renderdir', layout.buildDirectory.dir('mvt-render').get().asFile.absolutePath
+            systemProperty 'java.awt.headless', 'true'
+            maxHeapSize = '1g'
+        }
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+dependencies {
+    // Mapsforge data store, render theme and renderer classes, which are LGPL
+    api libs.mapsforge.map
+
+    testImplementation libs.junit.vintage.engine
+    // unit tests read .mbtiles on the JVM and render with the AWT backend
+    testImplementation libs.sqlite.jdbc
+    testImplementation libs.mapsforge.map.awt
+    testImplementation libs.mapsforge.themes
+}
+
+
+afterEvaluate {
+    publishing {
+
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = project.property("pom.groupId")
+                artifactId = project.name
+                version = project.property("pom.version")
+                pom {
+                    description = project.description
+                    url = project.property("pom.url")
+
+                    licenses {
+                        license {
+                            name = project.property("pom.licenses.license.0.name")
+                            url = project.property("pom.licenses.license.0.url")
+                            distribution = project.property("pom.licenses.license.0.distribution")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -49,6 +49,9 @@ dependencies {
 
     //osmdroid which is ASF licensed
     api  project(':osmdroid-android' )
+
+    // vector MBTiles (MVT) as a Mapsforge data store; depends on Mapsforge only
+    api project(':osmdroid-mapsforge-mvt')
 }
 
 

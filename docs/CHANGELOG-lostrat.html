@@ -37,6 +37,12 @@
   <hr>
 
   <h2>[Unreleased] — 7.0.3-lostrat-SNAPSHOT (in progress)</h2>
+  <h3>Vector MBTiles (MVT)</h3>
+  <ul>
+    <li>Add module <code>osmdroid-mapsforge-mvt</code>: an <code>.mbtiles</code> file of Mapbox Vector Tiles in the OpenMapTiles schema (tilemaker output) is read as a MapsForge <code>MapDataStore</code> (<code>MvtMapDataStore</code>, <code>AndroidMbtilesArchive</code>, <code>VectorTile</code>, <code>OpenMapTilesTags</code>), so the stock renderer and existing render themes draw it like a <code>.map</code> file. Overzoom past the file's deepest zoom, trail backfill at the two zooms above it, a decoded-tile cache bounded by coordinate count (about 27 MB by default), read-only file access. The module depends on MapsForge only (2026-11-16). See <a href="2026-11-16-vector-mbtiles-mvt-report.html">the report</a>.</li>
+    <li><code>MapsForgeTileSource.createFromFiles</code> opens files named <code>.mbtiles</code> as vector tiles and may mix them with <code>.map</code> files, e.g. a <code>.map</code> base with a vector contour file. Add <code>createFromDataStores</code>, <code>openDataStore</code> and <code>isVectorTileArchive</code>. The tile source now renders through <code>MvtDirectRenderer</code> / <code>MvtStandardRenderer</code>, which draw only the text of label-only ways (road names travel apart from roads in vector tiles) and behave as before for <code>.map</code> data. <code>osmdroid-mapsforge</code> depends on the new module with <code>api</code> (2026-11-16)</li>
+    <li>Add <code>MapsForgeTileSource.setTransparent</code>: tiles are rendered with an alpha channel and without the theme's map background, so a MapsForge source can be a layer over another map, e.g. a contour-only theme over a vector contour file, drawn above hillshade with no base map (2026-11-17)</li>
+  </ul>
   <h3>Prepared polyline batches</h3>
   <ul><li>Add <code>PolylineBatch</code>, <code>DefaultOverlayManager.replacePolylineBatch</code> and <code>Polyline.attachToMap</code> for worker preparation and linear-time UI publication with explicit layers, ownership/thread checks and regression tests (2026-09-11). See the <a href="2026-09-11-polyline-batch-report.html">integration and verification report</a>.</li></ul>
   <h3>Terrain-RGB hillshade</h3>

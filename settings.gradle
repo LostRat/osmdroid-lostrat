@@ -15,6 +15,7 @@ rootProject.name = 'osmdroid-lostrat'
 //libraries
 include ':osmdroid-android'
 include ':osmdroid-mapsforge'
+include ':osmdroid-mapsforge-mvt'
 include ':osmdroid-geopackage'
 include ':osmdroid-wms'
 include ':osmdroid-shape'

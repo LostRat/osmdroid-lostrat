@@ -12,6 +12,8 @@ I needed an updated version for myself, for my own app.
 
 - Added `MapsForgeTileSource.setTextScaleByZoom` (October 2026): MapsForge label text can grow with zoom so it stays readable next to the roads Mapsforge widens at high zoom, with its own tile-cache key. See [docs/DENSITY_SCALING_USAGE.md](docs/DENSITY_SCALING_USAGE.md#5-larger-label-text-at-high-zoom-mapsforge).
 
+- Added vector MBTiles (November 2026): an `.mbtiles` file of Mapbox Vector Tiles from tilemaker (OpenMapTiles schema) is drawn by MapsForge with the same render themes as a `.map` file, and can be mixed with `.map` files, for example contour lines from a separate vector file. Pass the files to `MapsForgeTileSource.createFromFiles`. New module `osmdroid-mapsforge-mvt`, which comes with `osmdroid-mapsforge`. See [the report](docs/2026-11-16-vector-mbtiles-mvt-report.html).
+
 I can only hope that the other features survive the updates. I do not use any other modules.
 
 ## Using the fork in your app
@@ -95,6 +97,7 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 |----------|-------------|
 | [docs/CHANGELOG-lostrat.md](docs/CHANGELOG-lostrat.md) | Fork-specific changelog (Markdown) |
 | [docs/CHANGELOG-lostrat.html](docs/CHANGELOG-lostrat.html) | Same changelog as HTML (readable in a browser) |
+| [docs/2026-11-16-vector-mbtiles-mvt-report.html](docs/2026-11-16-vector-mbtiles-mvt-report.html) | Vector MBTiles (MVT) as a MapsForge data store: use, data store vs tile cache, memory, verification, limits |
 | [docs/2026-09-11-polyline-batch-report.html](docs/2026-09-11-polyline-batch-report.html) | Worker preparation, bulk publication, ownership and integration example for polyline batches |
 | [docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md) | 10-layer overlay z-order and tap-priority system (reference) |
 | [docs/LAYERING_SYSTEM_TUTORIAL.md](docs/LAYERING_SYSTEM_TUTORIAL.md) | Tutorial for the layer system: use cases, manual overrides, migration from stock osmdroid |
