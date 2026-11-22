@@ -626,11 +626,12 @@ public class MvtMapDataStore extends MapDataStore {
         Builder result = new Builder();
         Projector projector = new Projector(zoom, x, y);
         for (VectorTile.Layer layer : tile.getLayers()) {
-            projector.setExtent(Math.max(1, layer.extent));
+            int extent = Math.max(1, layer.extent);
+            projector.setExtent(extent);
             boolean waterName = layer.name.equals("water_name");
             for (VectorTile.Feature feature : layer.features) {
                 try {
-                    convertFeature(layer.name, waterName, feature, projector, tags, result);
+                    convertFeature(layer.name, waterName, extent, feature, projector, tags, result);
                 } catch (IllegalArgumentException e) {
                     // a feature mapsforge refuses (e.g. coordinates out of range) is left out
                 }
@@ -639,7 +640,7 @@ public class MvtMapDataStore extends MapDataStore {
         return result.build();
     }
 
-    private static void convertFeature(String layer, boolean waterName, VectorTile.Feature feature,
+    private static void convertFeature(String layer, boolean waterName, int extent, VectorTile.Feature feature,
                                        Projector projector, TagInterner.Local tags, Builder result) {
         switch (feature.type) {
             case VectorTile.POINT: {
@@ -651,7 +652,11 @@ public class MvtMapDataStore extends MapDataStore {
                     List<Tag> shared = tags.intern(label);
                     for (int[] part : feature.parts) {
                         for (int i = 0; i + 1 < part.length; i += 2) {
-                            addPointLabel(result, (byte) 5, shared, projector.latLong(part[i], part[i + 1]));
+                            int cx = part[i];
+                            int cy = part[i + 1];
+                            if (cx >= 0 && cx < extent && cy >= 0 && cy < extent) {
+                                addPointLabel(result, (byte) 5, shared, projector.latLong(cx, cy));
+                            }
                         }
                     }
                     return;
@@ -663,11 +668,15 @@ public class MvtMapDataStore extends MapDataStore {
                 List<Tag> shared = tags.intern(element.tags);
                 for (int[] part : feature.parts) {
                     for (int i = 0; i + 1 < part.length; i += 2) {
-                        LatLong position = projector.latLong(part[i], part[i + 1]);
+                        int cx = part[i];
+                        int cy = part[i + 1];
                         if (element.textOnly) {
-                            addPointLabel(result, (byte) element.layer, shared, position);
+                            if (cx >= 0 && cx < extent && cy >= 0 && cy < extent) {
+                                addPointLabel(result, (byte) element.layer, shared, projector.latLong(cx, cy));
+                            }
                         } else {
-                            result.addPoi(new PointOfInterest((byte) element.layer, shared, position), element.minZoom);
+                            result.addPoi(new PointOfInterest((byte) element.layer, shared, projector.latLong(cx, cy)),
+                                    element.minZoom);
                         }
                     }
                 }

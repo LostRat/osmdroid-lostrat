@@ -205,6 +205,44 @@ public class MvtMapDataStoreUnitTest {
     }
 
     @Test
+    public void halfOpenBoundsGivePointLabelsToOneTile() {
+        TileBuilder own = new TileBuilder();
+        own.layer("poi").feature(VectorTile.POINT, new Pbf.Geometry().points(0, 1500),
+                "class", "park", "subclass", "park", "name", "Edge Park");
+        own.layer("water_name").feature(VectorTile.POINT, new Pbf.Geometry().points(1500, 0),
+                "class", "lake", "name", "Edge Lake");
+        own.layer("water_name").feature(VectorTile.POINT, new Pbf.Geometry().points(4100, 1500),
+                "class", "lake", "name", "Buffered Lake");
+        TileBuilder west = new TileBuilder();
+        west.layer("poi").feature(VectorTile.POINT, new Pbf.Geometry().points(4096, 1500),
+                "class", "park", "subclass", "park", "name", "Edge Park");
+        TileBuilder north = new TileBuilder();
+        north.layer("water_name").feature(VectorTile.POINT, new Pbf.Geometry().points(1500, 4096),
+                "class", "lake", "name", "Edge Lake");
+        MvtMapDataStore store = store(new MemoryArchive(0, Z)
+                .put(Z, X, Y, own.build())
+                .put(Z, X - 1, Y, west.build())
+                .put(Z, X, Y - 1, north.build()));
+        MapReadResult area = store.readMapData(new Tile(X - 1, Y - 1, (byte) Z, TILE_SIZE),
+                new Tile(X, Y, (byte) Z, TILE_SIZE));
+        int parks = 0;
+        int lakes = 0;
+        for (Way way : area.ways) {
+            if (way instanceof LabelOnlyWay) {
+                if (way.tags.contains(new Tag("name", "Edge Park"))) {
+                    parks++;
+                } else if (way.tags.contains(new Tag("name", "Edge Lake"))) {
+                    lakes++;
+                } else if (way.tags.contains(new Tag("name", "Buffered Lake"))) {
+                    Assert.fail("buffered water_name emitted outside [0, extent)");
+                }
+            }
+        }
+        Assert.assertEquals(1, parks);
+        Assert.assertEquals(1, lakes);
+    }
+
+    @Test
     public void poiMinZoomApplies() {
         MvtMapDataStore store = store(new MemoryArchive(0, Z).put(Z, X, Y, sampleTile()));
         // cafe at grid 1000,1000 is in z16 tile (4X + 0, 4Y + 0)
