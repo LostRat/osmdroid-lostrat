@@ -55,7 +55,10 @@ final class TagInterner {
             List<Tag> result = Collections.unmodifiableList(copy);
             if (!freeText) {
                 if (sharedLists.size() < MAX_SHARED) {
-                    sharedLists.put(result, result);
+                    List<Tag> existing = sharedLists.putIfAbsent(result, result);
+                    if (existing != null) {
+                        return existing;
+                    }
                 }
             } else {
                 lists.put(result, result);
@@ -77,7 +80,10 @@ final class TagInterner {
                 return shared;
             }
             if (sharedTags.size() < MAX_SHARED) {
-                sharedTags.put(tag, tag);
+                Tag existing = sharedTags.putIfAbsent(tag, tag);
+                if (existing != null) {
+                    return existing;
+                }
             }
             return tag;
         }

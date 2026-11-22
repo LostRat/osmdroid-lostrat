@@ -369,7 +369,7 @@ public class MvtMapDataStore extends MapDataStore {
      * another is already decoding waits for that one's result.
      */
     private SourceTile obtain(int kind, int zoom, int x, int y) {
-        if (x < 0 || y < 0 || zoom > 28 || x >= (1 << zoom) || y >= (1 << zoom)) {
+        if (zoom < 0 || zoom > 28 || x < 0 || y < 0 || x >= (1 << zoom) || y >= (1 << zoom)) {
             return SourceTile.EMPTY;
         }
         long key = key(kind, zoom, x, y);

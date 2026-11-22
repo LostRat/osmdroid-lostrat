@@ -269,15 +269,15 @@ public class MapsForgeTileSource extends BitmapTileSourceBase {
                     for (int i = 0; i < file.length; i++) {
                         dataStores[i] = openDataStore(file[i], language);
                     }
+                    return createFromDataStores(dataStores, theme, themeName, dataPolicy, hillsRenderConfig);
                 } catch (RuntimeException e) {
-                    for (MapDataStore opened : dataStores) {   // one file failed: close the others
+                    for (MapDataStore opened : dataStores) {   // one file or setup failed: close the others
                         if (opened != null) {
                             opened.close();
                         }
                     }
                     throw e;
                 }
-                return createFromDataStores(dataStores, theme, themeName, dataPolicy, hillsRenderConfig);
             }
         }
 

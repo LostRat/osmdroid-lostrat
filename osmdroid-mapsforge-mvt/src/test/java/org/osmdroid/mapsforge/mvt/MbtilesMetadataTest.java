@@ -104,7 +104,12 @@ public class MbtilesMetadataTest {
             out.write(plain);
         }
         Assert.assertEquals(0x78, z.toByteArray()[0] & 0xFF);
+        Assert.assertTrue(MbtilesMetadata.isCompressed(z.toByteArray()));
         Assert.assertArrayEquals(plain, MbtilesMetadata.unpack(z.toByteArray()));
+
+        byte[] fakeZlib = new byte[]{0x78, 0x00, 0x01};
+        Assert.assertFalse(MbtilesMetadata.isCompressed(fakeZlib));
+        Assert.assertSame(fakeZlib, MbtilesMetadata.unpack(fakeZlib));
     }
 
     @Test(expected = IOException.class)

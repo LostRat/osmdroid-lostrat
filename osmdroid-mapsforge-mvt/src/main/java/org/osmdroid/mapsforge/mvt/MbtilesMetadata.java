@@ -132,10 +132,15 @@ public final class MbtilesMetadata {
         return (1 << zoom) - 1 - row;
     }
 
-    /** True for data starting like gzip ({@code 1f 8b}) or zlib ({@code 78}), as nearly every writer stores tiles. */
+    /** True for data starting like gzip ({@code 1f 8b}) or zlib ({@code 78} with valid RFC 1950 check bits), as nearly every writer stores tiles. */
     public static boolean isCompressed(byte[] data) {
-        return data != null && data.length > 2
-                && ((data[0] == (byte) 0x1F && data[1] == (byte) 0x8B) || data[0] == (byte) 0x78);
+        if (data == null || data.length <= 2) {
+            return false;
+        }
+        int b0 = data[0] & 0xFF;
+        int b1 = data[1] & 0xFF;
+        return (b0 == 0x1F && b1 == 0x8B)
+                || (b0 == 0x78 && ((b0 << 8) | b1) % 31 == 0);
     }
 
     /** Unpacks gzip or zlib wrapped data; returns anything else unchanged. Null stays null. */
