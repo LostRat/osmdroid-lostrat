@@ -2,7 +2,7 @@
 # Every module dependency is declared here; build.gradle files use the libs.* accessors.
 
 [versions]
-agp = "9.5.1"
+agp = "9.5.2"
 kotlin = "2.4.20"
 spotbugs = "6.5.12"
 junit = "6.1.3"
