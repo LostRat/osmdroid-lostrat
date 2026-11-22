@@ -111,6 +111,15 @@ You can include a cloned OSMDroid folder inside your `settings.gradle` file: `in
 | [docs/2026-09-03-change-survey-and-commit-plan.html](docs/2026-09-03-change-survey-and-commit-plan.html) | Survey of unpushed 7.0.2 changes, untracked-file triage, and commit plan for the fork and the test app |
 | [reference/](reference/) | Session notes and reference code that is **not** compiled or maintained (see its README) |
 
+### Vector MBTiles (`.mbtiles` / MVT)
+
+`osmdroid-mapsforge` now renders offline vector `.mbtiles` files (Mapbox Vector Tiles in the OpenMapTiles schema, `format=pbf`, e.g. from tilemaker) through MapsForge using the same XML render themes as `.map` files:
+
+- **No extra dependency needed:** `osmdroid-mapsforge-mvt` is pulled in transitively by `osmdroid-mapsforge` (and has no `org.osmdroid` dependencies outside its own package, so it can also be used standalone with MapsForge).
+- **Drop-in loading & mixing:** Pass `.mbtiles` files to `MapsForgeTileSource.createFromFiles(...)` just like `.map` files — alone, mixed with `.map` files, or combined with a separate contour `.mbtiles`. Files are opened read-only; raster `.mbtiles` (`format != pbf`) are rejected with `IllegalArgumentException`.
+- **Transparent overlay layers:** Call `tileSource.setTransparent(true)` before the first tile renders (with a distinct cache key variant via `MapsForgeTileCacheKeys.forMapsThemeAndVariant`) to draw a theme such as contour lines over hillshade or another base map.
+- **Details & limits:** See [docs/2026-11-16-vector-mbtiles-mvt-report.html](docs/2026-11-16-vector-mbtiles-mvt-report.html) for schema coverage, trail backfill, memory budget, and caching notes.
+
 ### Interactive overlays (markers & polylines)
 
 See **[docs/ENHANCED_LAYER_SYSTEM.md](docs/ENHANCED_LAYER_SYSTEM.md)** for how draw order and tap handling work with the enhanced layer system — decoration vs interactive markers, user-drawn lines on top, FolderOverlay flattening, and manual overrides.
